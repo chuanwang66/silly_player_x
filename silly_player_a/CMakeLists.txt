@@ -79,6 +79,11 @@ function(install_myself)
 
 	add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
 		COMMAND "${CMAKE_COMMAND}" -E copy
+			"${CMAKE_BINARY_DIR}/deps/w32-pthreads/$<CONFIGURATION>/w32-pthreads.dll" "${CMAKE_BINARY_DIR}/${PROJECT_NAME}/$<CONFIGURATION>/"
+		VERBATIM)
+
+	add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+		COMMAND "${CMAKE_COMMAND}" -E copy
 			"${CMAKE_BINARY_DIR}/silly_player_lib/$<CONFIGURATION>/silly_player.dll" "${CMAKE_BINARY_DIR}/${PROJECT_NAME}/$<CONFIGURATION>/"
 		VERBATIM)
 endfunction()

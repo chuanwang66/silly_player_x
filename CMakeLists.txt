@@ -6,6 +6,7 @@ set(DepsPath "${CMAKE_SOURCE_DIR}/3rd/")
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
 
+add_subdirectory(deps)
 add_subdirectory(silly_player_lib)
 add_subdirectory(silly_player_a)
 #add_subdirectory(silly_player_av)

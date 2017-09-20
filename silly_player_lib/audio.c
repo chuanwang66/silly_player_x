@@ -22,13 +22,12 @@ static float cmid(float x, float min, float max){
 //@param[in] audio_buf_size: size of audio_buf in bytes
 //
 //return: bytes of the frame decoded
-static int audio_decode_frame(VideoState *is, uint8_t *audio_buf, int audio_buf_size, double *pts_ptr){
+static int audio_decode_frame(VideoState *is, uint8_t *audio_buf, int audio_buf_size){
     int pkt_consumed, data_size = 0;
-    double pts;
 	int conv_spec_channels = CONV_CHANNELS;
 	int conv_spec_format = CONV_AUDIO_FORMAT;
 
-    //data_size: how many bytes of frame generated
+    //data_size: bytes of frame decoded
     data_size = av_samples_get_buffer_size(NULL,
 		conv_spec_channels == 1 ? av_get_channel_layout_nb_channels(AV_CH_LAYOUT_MONO) : av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO),
         is->audio_ctx->frame_size,
@@ -63,8 +62,7 @@ static int audio_decode_frame(VideoState *is, uint8_t *audio_buf, int audio_buf_
                 memcpy(audio_buf, is->out_buffer, data_size);
             }
 
-            pts = is->audio_clock;
-            *pts_ptr = pts;
+			is->current_clock = is->audio_clock;
 			is->audio_clock += (double)data_size / (double)((conv_spec_format == 1 ? 2 : 4) * (conv_spec_channels == 1 ? 1 : 2) * is->audio_ctx->frame_size);
 
             return data_size;
@@ -91,26 +89,30 @@ static int audio_decode_frame(VideoState *is, uint8_t *audio_buf, int audio_buf_
     }
 }
 
-//static int sample_cnt = 0;
+#define PRINT_TOTAL_SAMPLES 0
+#if PRINT_TOTAL_SAMPLES == 1
+static int total_samples = 0; //total sample number (1 sample: audio data of all channels)
+#endif
 
 //'len' bytes should be fed to 'stream'
 void audio_callback(void *userdata, uint8_t *stream, int len){
     VideoState *is = (VideoState *)userdata;
-    size_t len1, audio_size;
-    double pts;
+	size_t actual_len, audio_size;
+	int conv_spec_channels = CONV_CHANNELS;
+	int conv_spec_format = CONV_AUDIO_FORMAT;
 
-	//sample_cnt += (len/4);
-	//fprintf(stderr, "total samples: %d\n", sample_cnt); //累积采样个数(1个采样包括左右声道的数据)
-    //fprintf(stderr, "audio_callback(): av_time()=%lf, len=%d\n", (double)av_gettime() / 1000.0, len);
+#if PRINT_TOTAL_SAMPLES == 1
+	total_samples += (len / conv_spec_channels / (conv_spec_format == 1 ? 2 : 4));
+	fprintf(stderr, "%lf: total samples: %d\n", (float)av_gettime() / 1000000.0, total_samples);
+#endif
 
     SDL_memset(stream, 0, len);  //SDL 2.0
 
-    //is->audio_buf ==> 填充len个字节到stream
-    //(不够则不断解码音频到is->audio_buf)
+    //take 'len' bytes from 'is->audio_buf' to 'stream'.
+    //NOTE: if there's not enough in 'is-audio_buf', audio_decode_frame() more to fill it!
     while(len > 0){
-        if(is->audio_buf_index >= is->audio_buf_size){
-            //we have sent all our data(in audio buf), decode more
-            audio_size = audio_decode_frame(is, is->audio_buf, sizeof(is->audio_buf), &pts);
+        if(is->audio_buf_index >= is->audio_buf_size){  //we have sent all our data(in audio buf), decode more
+            audio_size = audio_decode_frame(is, is->audio_buf, sizeof(is->audio_buf));
             if(audio_size < 0){  //error, output silence
                 is->audio_buf_size = SDL_AUDIO_BUFFER_SIZE;
                 memset(is->audio_buf, 0, is->audio_buf_size);
@@ -121,32 +123,17 @@ void audio_callback(void *userdata, uint8_t *stream, int len){
         }
 
         //there're data left in audio buf, feed to stream
-		len1 = min(is->audio_buf_size - is->audio_buf_index, len);
-		SDL_MixAudio(stream, (uint8_t *)is->audio_buf + is->audio_buf_index, len1, SDL_MIX_MAXVOLUME);
+		actual_len = min(is->audio_buf_size - is->audio_buf_index, len);
+		SDL_MixAudio(stream, (uint8_t *)is->audio_buf + is->audio_buf_index, actual_len, SDL_MIX_MAXVOLUME);
 
-        len -= len1;
-        stream += len1;
-        is->audio_buf_index += len1;
+		len -= actual_len;
+		stream += actual_len;
+		is->audio_buf_index += actual_len;
     }
 }
 
 double get_audio_clock(VideoState *is) {
   double pts;
-#if 1
-  int hw_buf_size, bytes_per_sec, n;
-
-  pts = is->audio_clock; /* maintained in the audio thread */
-  hw_buf_size = is->audio_buf_size - is->audio_buf_index;
-  bytes_per_sec = 0;
-  n = is->audio_ctx->channels * 2;
-  if(is->audio_st) {
-    bytes_per_sec = is->audio_ctx->sample_rate * n;
-  }
-  if(bytes_per_sec) {
-    pts -= (double)hw_buf_size / bytes_per_sec;
-  }
-#else
-  pts = (av_gettime() / 1000000.0);
-#endif
+  pts = is->current_clock; /* maintained in the audio thread */
   return pts;
 }

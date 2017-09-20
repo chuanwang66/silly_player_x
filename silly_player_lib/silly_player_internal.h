@@ -39,8 +39,8 @@ typedef struct VideoState{
 	AVStream *audio_st;
 	AVCodecContext *audio_ctx;
 
-	double current_clock;	//first pos decoded (in sec)
-	double audio_clock;		//next first pos to be decoded (in sec)
+	double current_clock;	//first pos decoded (in sec)	当前已播放时间戳
+	double audio_clock;		//next first pos to be decoded (in sec)	当前已解码时间戳
 
 	//注: 从音频流中读出的audio packet放入队列audioq，但一个audio packet可能被解为多个audio frame并放入audio buffer
 	//    因此audio_pkt就是上一次没完全解完的audio packet，audio_pkt_data[0, ... , audio_pkt_size-1]是其中的剩余部分

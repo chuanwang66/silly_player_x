@@ -49,6 +49,8 @@ static int stream_component_open(int stream_index)
 	AVCodec *codec = NULL;
 	AVCodecContext *codecCtx = NULL;
 	SDL_AudioSpec desired_spec, spec;
+	int conv_spec_channels = CONV_CHANNELS;
+	int conv_spec_format = CONV_AUDIO_FORMAT;
 
 	if (stream_index < 0 || stream_index >= is->pFormatCtx->nb_streams)
 	{
@@ -73,11 +75,12 @@ static int stream_component_open(int stream_index)
 	//open SDL audio
 	if (codecCtx->codec_type == AVMEDIA_TYPE_AUDIO)
 	{
+		desired_spec.channels = conv_spec_channels == 1 ? av_get_channel_layout_nb_channels(AV_CH_LAYOUT_MONO) : av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO);
+		desired_spec.format = conv_spec_format == 1 ? AUDIO_S16SYS : AUDIO_F32SYS;
 		desired_spec.freq = codecCtx->sample_rate;
-		desired_spec.format = AUDIO_S16SYS;
-		desired_spec.channels = av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO);//codecCtx->channels;
+
 		desired_spec.silence = 0;
-		desired_spec.samples = codecCtx->frame_size;//SDL_AUDIO_BUFFER_SIZE;
+		desired_spec.samples = codecCtx->frame_size;	//SDL_AUDIO_BUFFER_SIZE;
 
 		desired_spec.callback = audio_callback;
 		desired_spec.userdata = is;
@@ -118,18 +121,20 @@ static int stream_component_open(int stream_index)
 		is->audio_buf_index = 0;
 
 		//prepare conversion facility (FLTP -> S16)
-		is->out_buffer = (uint8_t *)av_malloc(MAX_AUDIO_FRAME_SIZE << 1); //why twice ???
+		//和swr_convert()保持一致: 一个声道最多MAX_AUDIO_FRAME_SIZE字节，假设最多两个声道
+		is->out_buffer = (uint8_t *)av_malloc(MAX_AUDIO_FRAME_SIZE << 1);
 
 		is->swr_ctx = swr_alloc();
 		is->swr_ctx = swr_alloc_set_opts(is->swr_ctx,
-			AV_CH_LAYOUT_STEREO,
-			AV_SAMPLE_FMT_S16,
-			is->audio_ctx->sample_rate, //44100
-			av_get_default_channel_layout(is->audio_ctx->channels),
-			is->audio_ctx->sample_fmt,
-			is->audio_ctx->sample_rate,
-			0,
-			NULL);
+			conv_spec_channels == 1 ? AV_CH_LAYOUT_MONO : AV_CH_LAYOUT_STEREO,	//out_ch_layout
+			conv_spec_format == 1 ? AV_SAMPLE_FMT_S16 : AV_SAMPLE_FMT_FLT,		//out_sample_fmt
+			codecCtx->sample_rate,												//out_sample_rate
+			av_get_default_channel_layout(is->audio_ctx->channels),	//in_ch_layout
+			codecCtx->sample_fmt,									//in_sample_fmt
+			codecCtx->sample_rate,									//in_sample_rate
+			0,		//log_offset
+			NULL	//log_ctx
+			);
 		swr_init(is->swr_ctx);
 		break;
 	case AVMEDIA_TYPE_VIDEO:

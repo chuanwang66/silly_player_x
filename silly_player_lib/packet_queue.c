@@ -22,7 +22,6 @@ void packet_queue_clear(PacketQueue *q) {
         q->size -= pktList->pkt.size;
         av_free(pktList);
     }
-    printf("after clearing: nb=%d, size=%d\n", q->nb_packets, q->size);
 
     SDL_UnlockMutex(q->mutex);
 }

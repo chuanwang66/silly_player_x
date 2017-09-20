@@ -16,16 +16,24 @@ static float cmid(float x, float min, float max){
     return (x<min) ? min : ((x>max) ? max: x);
 }
 
-static int audio_decode_frame(VideoState *is, uint8_t *audio_buf, int buf_size, double *pts_ptr){
+//decode one frame
+//@param[in] is: 
+//@param[out] audio_buf: would be filled with the frame decoded
+//@param[in] audio_buf_size: size of audio_buf in bytes
+//
+//return: bytes of the frame decoded
+static int audio_decode_frame(VideoState *is, uint8_t *audio_buf, int audio_buf_size, double *pts_ptr){
     int pkt_consumed, data_size = 0;
     double pts;
+	int conv_spec_channels = CONV_CHANNELS;
+	int conv_spec_format = CONV_AUDIO_FORMAT;
 
     //data_size: how many bytes of frame generated
     data_size = av_samples_get_buffer_size(NULL,
-                                            av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO),
-                                            is->audio_ctx->frame_size,
-                                            AV_SAMPLE_FMT_S16,
-                                            1);
+		conv_spec_channels == 1 ? av_get_channel_layout_nb_channels(AV_CH_LAYOUT_MONO) : av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO),
+        is->audio_ctx->frame_size,
+		conv_spec_format == 1 ? AV_SAMPLE_FMT_S16 : AV_SAMPLE_FMT_FLT,
+        1);
 
     for(;;){
         //step 1. is->audio_pkt_ptr  ==解码==>  is->audio_frame  ==转码==>  is->out_buffer
@@ -57,7 +65,7 @@ static int audio_decode_frame(VideoState *is, uint8_t *audio_buf, int buf_size, 
 
             pts = is->audio_clock;
             *pts_ptr = pts;
-            is->audio_clock += (double)data_size / (double)(2 * is->audio_ctx->channels * is->audio_ctx->sample_rate);
+			is->audio_clock += (double)data_size / (double)((conv_spec_format == 1 ? 2 : 4) * (conv_spec_channels == 1 ? 1 : 2) * is->audio_ctx->frame_size);
 
             return data_size;
         }
@@ -83,12 +91,16 @@ static int audio_decode_frame(VideoState *is, uint8_t *audio_buf, int buf_size, 
     }
 }
 
-//bytes of length 'len' need to be fed to 'stream'
+//static int sample_cnt = 0;
+
+//'len' bytes should be fed to 'stream'
 void audio_callback(void *userdata, uint8_t *stream, int len){
     VideoState *is = (VideoState *)userdata;
-    int len1, audio_size;
+    size_t len1, audio_size;
     double pts;
 
+	//sample_cnt += (len/4);
+	//fprintf(stderr, "total samples: %d\n", sample_cnt); //累积采样个数(1个采样包括左右声道的数据)
     //fprintf(stderr, "audio_callback(): av_time()=%lf, len=%d\n", (double)av_gettime() / 1000.0, len);
 
     SDL_memset(stream, 0, len);  //SDL 2.0
@@ -109,10 +121,8 @@ void audio_callback(void *userdata, uint8_t *stream, int len){
         }
 
         //there're data left in audio buf, feed to stream
-        len1 = is->audio_buf_size - is->audio_buf_index;
-        len1 = min(len1, len);
-
-        SDL_MixAudio(stream, (uint8_t *)is->audio_buf + is->audio_buf_index, len1, SDL_MIX_MAXVOLUME);
+		len1 = min(is->audio_buf_size - is->audio_buf_index, len);
+		SDL_MixAudio(stream, (uint8_t *)is->audio_buf + is->audio_buf_index, len1, SDL_MIX_MAXVOLUME);
 
         len -= len1;
         stream += len1;

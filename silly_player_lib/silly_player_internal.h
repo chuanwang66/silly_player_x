@@ -10,9 +10,13 @@
 #include "packet_queue.h"
 
 #define MAX_AUDIO_FRAME_SIZE 192000
-
-//SDL2
 #define SDL_AUDIO_BUFFER_SIZE 1024
+
+//swresample转换后的采样格式
+//注: SDL2会用这个格式回调，进行播放
+//注: 外部程序获取采样会用这个格式回调
+#define CONV_CHANNELS 2;		//1: mono, 2:stereo
+#define CONV_AUDIO_FORMAT 2;	//1: signed 16 bits; 2: 32-bit float
 
 //note: allocated once
 typedef struct VideoPicture{
@@ -35,7 +39,7 @@ typedef struct VideoState{
 	AVStream *audio_st;
 	AVCodecContext *audio_ctx;
 
-	double audio_clock;
+	double audio_clock;	//time of duration (in sec)
 
 	//注: 从音频流中读出的audio packet放入队列audioq，但一个audio packet可能被解为多个audio frame并放入audio buffer
 	//    因此audio_pkt就是上一次没完全解完的audio packet，audio_pkt_data[0, ... , audio_pkt_size-1]是其中的剩余部分
@@ -56,8 +60,8 @@ typedef struct VideoState{
 	AVFrame audio_frame;
 	//audio_buf[audio_index, ... , audio_buf_size-1] is a bunch of audio frame
 	uint8_t audio_buf[(MAX_AUDIO_FRAME_SIZE * 3) >> 1]; //why???
-	unsigned int audio_buf_index;
-	unsigned int audio_buf_size;
+	size_t audio_buf_index;
+	size_t audio_buf_size;
 
 	SwrContext *swr_ctx; //to convert audio frame from AV_SAMPLE_FMT_FLTP to AV_SAMPLE_FMT_S16
 	uint8_t *out_buffer; //to contain the conversion result

@@ -79,7 +79,5 @@ int parse_thread(void *arg)
         av_free(is->out_buffer);
         swr_free(&is->swr_ctx);
     }
-
-    fprintf(stderr, "parse thread breaks\n");
     return 0;
 }

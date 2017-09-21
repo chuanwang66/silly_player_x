@@ -4,6 +4,7 @@
 #include <libswresample/swresample.h>
 #include <libavutil/time.h>
 
+#include "silly_player_params.h"
 #include "silly_player_internal.h"
 #include "audio.h"
 
@@ -24,14 +25,12 @@ static float cmid(float x, float min, float max){
 //return: bytes of the frame decoded
 static int audio_decode_frame(VideoState *is, uint8_t *audio_buf, int audio_buf_size){
     int pkt_consumed, data_size = 0;
-	int conv_spec_channels = CONV_CHANNELS;
-	int conv_spec_format = CONV_AUDIO_FORMAT;
 
     //data_size: bytes of frame decoded
     data_size = av_samples_get_buffer_size(NULL,
-		conv_spec_channels == 1 ? av_get_channel_layout_nb_channels(AV_CH_LAYOUT_MONO) : av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO),
+		is->audiospec.channels == SA_CH_LAYOUT_MONO ? av_get_channel_layout_nb_channels(AV_CH_LAYOUT_MONO) : av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO),
         is->audio_ctx->frame_size,
-		conv_spec_format == 1 ? AV_SAMPLE_FMT_S16 : AV_SAMPLE_FMT_FLT,
+		is->audiospec.format == SA_SAMPLE_FMT_S16 ? AV_SAMPLE_FMT_S16 : AV_SAMPLE_FMT_FLT,
         1);
 
     for(;;){
@@ -63,7 +62,7 @@ static int audio_decode_frame(VideoState *is, uint8_t *audio_buf, int audio_buf_
             }
 
 			is->current_clock = is->audio_clock;
-			is->audio_clock += (double)data_size / (double)((conv_spec_format == 1 ? 2 : 4) * (conv_spec_channels == 1 ? 1 : 2) * is->audio_ctx->frame_size);
+			is->audio_clock += (double)data_size / (double)((is->audiospec.format == SA_SAMPLE_FMT_S16 ? 2 : 4) * (is->audiospec.channels == SA_CH_LAYOUT_MONO ? 1 : 2) * is->audio_ctx->frame_size);
 
             return data_size;
         }
@@ -98,11 +97,9 @@ static int total_samples = 0; //total sample number (1 sample: audio data of all
 void audio_callback(void *userdata, uint8_t *stream, int len){
     VideoState *is = (VideoState *)userdata;
 	size_t actual_len, audio_size;
-	int conv_spec_channels = CONV_CHANNELS;
-	int conv_spec_format = CONV_AUDIO_FORMAT;
 
 #if PRINT_TOTAL_SAMPLES == 1
-	total_samples += (len / conv_spec_channels / (conv_spec_format == 1 ? 2 : 4));
+	total_samples += (len / (is->audiospec.channels == SA_CH_LAYOUT_MONO ? 1 : 2) / (is->audiospec.format == SA_SAMPLE_FMT_S16 ? 2 : 4));
 	fprintf(stderr, "%lf: total samples: %d\n", (float)av_gettime() / 1000000.0, total_samples);
 #endif
 
@@ -125,6 +122,11 @@ void audio_callback(void *userdata, uint8_t *stream, int len){
         //there're data left in audio buf, feed to stream
 		actual_len = min(is->audio_buf_size - is->audio_buf_index, len);
 		SDL_MixAudio(stream, (uint8_t *)is->audio_buf + is->audio_buf_index, actual_len, SDL_MIX_MAXVOLUME);
+		
+		pthread_mutex_lock(&is->audio_ring_mutex);
+		circlebuf_push_back(&is->audio_ring, (uint8_t *)is->audio_buf + is->audio_buf_index, actual_len);
+		//printf("circlebuf size: %d\n", is->audio_ring.size);
+		pthread_mutex_unlock(&is->audio_ring_mutex);
 
 		len -= actual_len;
 		stream += actual_len;

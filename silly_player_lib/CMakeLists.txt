@@ -117,7 +117,8 @@ set(silly_player_lib_HEADERS
 	audio.h
 	video.h
 	silly_player_internal.h
-	silly_player.h)
+	silly_player.h
+	silly_player_params.h)
 
 source_group("silly_player_lib\\Source Files" FILES ${silly_player_lib_SOURCES})
 source_group("silly_player_lib\\Header Files" FILES ${silly_player_lib_HEADERS})

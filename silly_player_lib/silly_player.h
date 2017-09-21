@@ -1,14 +1,16 @@
 #pragma once
 
 #include "c99defs.h"
+#include "silly_player_params.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-EXPORT int silly_audio_startup(const char *filename);
+EXPORT int silly_audio_open(const char *filename, silly_audiospec *sa_desired, silly_audiospec *sa_obtained);
+EXPORT void silly_audio_printspec(const silly_audiospec *spec);
 
-EXPORT int silly_audio_shutdown();
+EXPORT int silly_audio_close();
 
 EXPORT void silly_audio_pause();
 

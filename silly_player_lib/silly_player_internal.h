@@ -8,15 +8,12 @@
 #include <libswresample/swresample.h>
 
 #include "packet_queue.h"
+#include "silly_player_params.h"
+#include "util/circlebuf.h"
+#include "util/threading.h"
 
 #define MAX_AUDIO_FRAME_SIZE 192000
 #define SDL_AUDIO_BUFFER_SIZE 1024
-
-//swresample转换后的采样格式
-//注: SDL2会用这个格式回调，进行播放
-//注: 外部程序获取采样会用这个格式回调
-#define CONV_CHANNELS 2;		//1: mono, 2:stereo
-#define CONV_AUDIO_FORMAT 2;	//1: signed 16 bits; 2: 32-bit float
 
 //note: allocated once
 typedef struct VideoPicture{
@@ -38,6 +35,8 @@ typedef struct VideoState{
 	int audio_stream_index;
 	AVStream *audio_st;
 	AVCodecContext *audio_ctx;
+
+	struct silly_audiospec audiospec;	//（转换后）音频采样格式
 
 	double current_clock;	//first pos decoded (in sec)	当前已播放时间戳
 	double audio_clock;		//next first pos to be decoded (in sec)	当前已解码时间戳
@@ -66,6 +65,9 @@ typedef struct VideoState{
 
 	SwrContext *swr_ctx; //to convert audio frame from AV_SAMPLE_FMT_FLTP to AV_SAMPLE_FMT_S16
 	uint8_t *out_buffer; //to contain the conversion result
+
+	struct circlebuf audio_ring;		//ring buffer to hold audio frames decoded, providing for callback
+	pthread_mutex_t audio_ring_mutex;	//ring buffer mutex
 
 	/** ************** video related ************** */
 	int video_stream_index;

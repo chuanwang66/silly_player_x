@@ -8,6 +8,7 @@ int main(int argc, char* argv[])
 	int sec;
 	int num;
 	double ts;
+	silly_audiospec desired_spec, spec;
 
 	int exit_process = 0;
 
@@ -16,7 +17,13 @@ int main(int argc, char* argv[])
         exit(1);
     }
 
-	silly_audio_startup(argv[1]);
+	desired_spec.channels = SA_CH_LAYOUT_STEREO;
+	desired_spec.format = SA_SAMPLE_FMT_FLT;
+	desired_spec.samplerate = 0;
+	desired_spec.samples = 1024;
+
+	silly_audio_open(argv[1], &desired_spec, &spec);
+	silly_audio_printspec(&spec);
 
 	printf("\npress:\n");
 	printf("\t 'q\\n' to quit\n");
@@ -30,7 +37,7 @@ int main(int argc, char* argv[])
 			continue;
 		switch (cmd) {
 		case 'q':
-			silly_audio_shutdown();
+			silly_audio_close();
 			exit_process = 1;
 			break;
 		case 'p':

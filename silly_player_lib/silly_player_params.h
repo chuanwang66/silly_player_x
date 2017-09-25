@@ -21,5 +21,5 @@ typedef struct silly_audiospec
 }silly_audiospec;
 
 #ifdef __cplusplus
-extern "C" {
+};
 #endif

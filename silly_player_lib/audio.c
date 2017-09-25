@@ -123,10 +123,11 @@ void audio_callback(void *userdata, uint8_t *stream, int len){
 		actual_len = min(is->audio_buf_size - is->audio_buf_index, len);
 		SDL_MixAudio(stream, (uint8_t *)is->audio_buf + is->audio_buf_index, actual_len, SDL_MIX_MAXVOLUME);
 		
-		pthread_mutex_lock(&is->audio_ring_mutex);
-		circlebuf_push_back(&is->audio_ring, (uint8_t *)is->audio_buf + is->audio_buf_index, actual_len);
-		//printf("circlebuf size: %d\n", is->audio_ring.size);
-		pthread_mutex_unlock(&is->audio_ring_mutex);
+		if (is->active_fetch) {
+			pthread_mutex_lock(&is->audio_fetch_buffer_mutex);
+			circlebuf_push_back(&is->audio_fetch_buffer, (uint8_t *)is->audio_buf + is->audio_buf_index, actual_len);
+			pthread_mutex_unlock(&is->audio_fetch_buffer_mutex);
+		}
 
 		len -= actual_len;
 		stream += actual_len;

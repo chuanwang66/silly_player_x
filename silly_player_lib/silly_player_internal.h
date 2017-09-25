@@ -29,12 +29,11 @@ typedef struct VideoState{
 	AVFormatContext *pFormatCtx;
 	struct SwsContext *sws_ctx;
 
-	uint32_t seek_pos_sec; //seek position in seconds
-
 	/** ************** audio related ************** */
 	int audio_stream_index;
 	AVStream *audio_st;
 	AVCodecContext *audio_ctx;
+	uint32_t seek_pos_sec; //seek position in seconds
 
 	struct silly_audiospec audiospec;	//（转换后）音频采样格式
 
@@ -63,11 +62,17 @@ typedef struct VideoState{
 	size_t audio_buf_index;
 	size_t audio_buf_size;
 
-	SwrContext *swr_ctx; //to convert audio frame from AV_SAMPLE_FMT_FLTP to AV_SAMPLE_FMT_S16
+	SwrContext *swr_ctx; //to convert audio frame
 	uint8_t *out_buffer; //to contain the conversion result
 
-	struct circlebuf audio_ring;		//ring buffer to hold audio frames decoded, providing for callback
-	pthread_mutex_t audio_ring_mutex;	//ring buffer mutex
+	/** ************** audio fetching related ************** */
+	struct circlebuf audio_fetch_buffer;		//ring buffer to hold audio frames decoded, providing for callback
+	pthread_mutex_t audio_fetch_buffer_mutex;
+
+	int channels_fetch;
+	int samplerate_fetch;
+	SwrContext *swr_ctx_fetch;
+	volatile bool active_fetch;
 
 	/** ************** video related ************** */
 	int video_stream_index;

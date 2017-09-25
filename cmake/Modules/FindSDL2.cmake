@@ -51,31 +51,31 @@ find_library(SDL2_LIB
 		../bin${_lib_suffix} ../bin)
 
 #find SDL2main.lib
-find_library(SDL2main_LIB
-	NAMES ${_SDL2_LIBRARIES} SDL2main
-	HINTS
-		ENV sdl2Path${_lib_suffix}
-		ENV sdl2Path
-		ENV DepsPath${_lib_suffix}
-		ENV DepsPath
-		${sdl2Path${_lib_suffix}}
-		${sdl2Path}
-		${DepsPath${_lib_suffix}}
-		${DepsPath}
-		${_SDL2_LIBRARY_DIRS}
-	PATHS
-		/usr/lib /usr/local/lib /opt/local/lib /sw/lib
-	PATH_SUFFIXES
-		lib${_lib_suffix} lib
-		libs${_lib_suffix} libs
-		bin${_lib_suffix} bin
-		../lib${_lib_suffix} ../lib
-		../libs${_lib_suffix} ../libs
-		../bin${_lib_suffix} ../bin)
+#find_library(SDL2main_LIB
+#	NAMES ${_SDL2_LIBRARIES} SDL2main
+#	HINTS
+#		ENV sdl2Path${_lib_suffix}
+#		ENV sdl2Path
+#		ENV DepsPath${_lib_suffix}
+#		ENV DepsPath
+#		${sdl2Path${_lib_suffix}}
+#		${sdl2Path}
+#		${DepsPath${_lib_suffix}}
+#		${DepsPath}
+#		${_SDL2_LIBRARY_DIRS}
+#	PATHS
+#		/usr/lib /usr/local/lib /opt/local/lib /sw/lib
+#	PATH_SUFFIXES
+#		lib${_lib_suffix} lib
+#		libs${_lib_suffix} libs
+#		bin${_lib_suffix} bin
+#		../lib${_lib_suffix} ../lib
+#		../libs${_lib_suffix} ../libs
+#		../bin${_lib_suffix} ../bin)
 
 set(SDL2_LIB
-	${SDL2_LIB}
-	${SDL2main_LIB})
+	${SDL2_LIB})
+#	${SDL2main_LIB})
 
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(SDL2 DEFAULT_MSG SDL2_LIB SDL2_INCLUDE_DIR)

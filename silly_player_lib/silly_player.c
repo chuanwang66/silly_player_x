@@ -17,16 +17,13 @@
 #include "silly_player_internal.h"
 #include "silly_player.h"
 
-#if defined(_WIN32)
-#include <Windows.h>
-#elif defined(__APPLE__)
-#include <unistd.h>
-#define Sleep(msecond) usleep(msecond * 1000)
-#endif
+#include "util/darray.h"
+#include "util/platform.h"
 
 extern int global_exit;
 extern int global_exit_parse;
-static VideoState *is; //global video state
+static VideoState *is = NULL; //global video state
+static bool active = false;
 
 static int open_input()
 {
@@ -44,13 +41,13 @@ static int open_input()
 	return 0;
 }
 
-static int stream_component_open(int stream_index, silly_audiospec *sa_desired, silly_audiospec *sa_obtained)
+static int stream_component_open(unsigned int stream_index, const silly_audiospec *sa_desired, silly_audiospec *sa_obtained)
 {
 	AVCodec *codec = NULL;
 	AVCodecContext *codecCtx = NULL;
 	SDL_AudioSpec desired_spec, spec;
 
-	if (stream_index < 0 || stream_index >= is->pFormatCtx->nb_streams)
+	if (stream_index >= is->pFormatCtx->nb_streams)
 	{
 		fprintf(stderr, "stream index invalid: stream_index=%d, stream #=%d.\n", stream_index, is->pFormatCtx->nb_streams);
 		return -1;
@@ -88,21 +85,32 @@ static int stream_component_open(int stream_index, silly_audiospec *sa_desired, 
 			fprintf(stderr, "SDL_OpenAudio(): %s.\n", SDL_GetError());
 			return -1;
 		}
+
+		//set is->audiospec
+		if (spec.channels == av_get_channel_layout_nb_channels(AV_CH_LAYOUT_MONO))
+			is->audiospec.channels = SA_CH_LAYOUT_MONO;
+		else if (spec.channels == av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO))
+			is->audiospec.channels = SA_CH_LAYOUT_STEREO;
+		else
+			is->audiospec.channels = SA_CH_LAYOUT_INVAL;
+
+
+		if (spec.format == AUDIO_S16SYS)
+			is->audiospec.format = SA_SAMPLE_FMT_S16;
+		else if (spec.format == AUDIO_F32SYS)
+			is->audiospec.format = SA_SAMPLE_FMT_FLT;
+		else
+			is->audiospec.format = SA_SAMPLE_FMT_INVAL;
+
+		is->audiospec.samplerate = spec.freq;
+		is->audiospec.samples = spec.samples;
+
+		//set sa_obtained
 		if (sa_obtained) {
-			is->audiospec.channels = sa_obtained->channels = SA_CH_LAYOUT_INVAL;
-			if (spec.channels == av_get_channel_layout_nb_channels(AV_CH_LAYOUT_MONO))
-				is->audiospec.channels = sa_obtained->channels = SA_CH_LAYOUT_MONO;
-			if (spec.channels == av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO))
-				is->audiospec.channels = sa_obtained->channels = SA_CH_LAYOUT_STEREO;
-
-			is->audiospec.format = sa_obtained->format = SA_SAMPLE_FMT_INVAL;
-			if (spec.format == AUDIO_S16SYS)
-				is->audiospec.format = sa_obtained->format = SA_SAMPLE_FMT_S16;
-			if (spec.format == AUDIO_F32SYS)
-				is->audiospec.format = sa_obtained->format = SA_SAMPLE_FMT_FLT;
-
-			is->audiospec.samplerate = sa_obtained->samplerate = spec.freq;
-			is->audiospec.samples = sa_obtained->samples = spec.samples;
+			sa_obtained->channels = is->audiospec.channels;
+			sa_obtained->format = is->audiospec.format;
+			sa_obtained->samplerate = is->audiospec.samplerate;
+			sa_obtained->samples = is->audiospec.samples;
 		}
 
 		is->audio_hw_buf_size = spec.size;
@@ -136,9 +144,9 @@ static int stream_component_open(int stream_index, silly_audiospec *sa_desired, 
 
 		is->swr_ctx = swr_alloc();
 		is->swr_ctx = swr_alloc_set_opts(is->swr_ctx,
-			sa_obtained->channels == SA_CH_LAYOUT_MONO ? AV_CH_LAYOUT_MONO : AV_CH_LAYOUT_STEREO,	//out_ch_layout
-			sa_obtained->format == SA_SAMPLE_FMT_S16 ? AV_SAMPLE_FMT_S16 : AV_SAMPLE_FMT_FLT,		//out_sample_fmt
-			sa_obtained->samplerate,																//out_sample_rate
+			is->audiospec.channels == SA_CH_LAYOUT_MONO ? AV_CH_LAYOUT_MONO : AV_CH_LAYOUT_STEREO,	//out_ch_layout
+			is->audiospec.format == SA_SAMPLE_FMT_S16 ? AV_SAMPLE_FMT_S16 : AV_SAMPLE_FMT_FLT,		//out_sample_fmt
+			is->audiospec.samplerate,																//out_sample_rate
 			av_get_default_channel_layout(codecCtx->channels),		//in_ch_layout
 			codecCtx->sample_fmt,									//in_sample_fmt
 			codecCtx->sample_rate,									//in_sample_rate
@@ -167,34 +175,33 @@ static int stream_component_open(int stream_index, silly_audiospec *sa_desired, 
 	return 0;
 }
 
-static int open_audio_decoder(silly_audiospec *sa_desired, silly_audiospec *sa_obtained)
+static int open_audio_decoder(const silly_audiospec *sa_desired, silly_audiospec *sa_obtained)
 {
-	int audio_stream_index = -1;
-	int i;
+	unsigned int audio_stream_index = -1;
+	bool audio_stream_index_found = false;
+	unsigned int i;
 
 	for (i = 0; i<is->pFormatCtx->nb_streams; ++i)
 	{
 		int media_type = is->pFormatCtx->streams[i]->codec->codec_type;
 
-		if (media_type == AVMEDIA_TYPE_AUDIO && audio_stream_index == -1)
+		if (media_type == AVMEDIA_TYPE_AUDIO && !audio_stream_index_found)
 		{
 			audio_stream_index = i;
+			audio_stream_index_found = true;
 			break;
 		}
 	}
 
-	if (audio_stream_index >= 0)
-	{
-		if (stream_component_open(audio_stream_index, sa_desired, sa_obtained) < 0)
-		{
-			fprintf(stderr, "%s: could not open audio codecs.\n", is->filename);
-			return -1;
-		}
-	}
-	else
-	{
+	if (!audio_stream_index_found) {
 		fprintf(stderr, "%s: could not find audio stream.\n", is->filename);
 		return -1;
+	}
+
+	if (stream_component_open(audio_stream_index, sa_desired, sa_obtained) < 0)
+	{
+		fprintf(stderr, "%s: could not open audio codecs.\n", is->filename);
+		return -2;
 	}
 
 	return 0;
@@ -202,33 +209,31 @@ static int open_audio_decoder(silly_audiospec *sa_desired, silly_audiospec *sa_o
 
 static int open_video_decoder()
 {
-	int video_stream_index = -1;
-	int i;
+	unsigned int video_stream_index = -1;
+	bool video_stream_index_found = false;
+	unsigned int i;
 
 	for (i = 0; i<is->pFormatCtx->nb_streams; ++i)
 	{
 		int media_type = is->pFormatCtx->streams[i]->codec->codec_type;
 
-		if (media_type == AVMEDIA_TYPE_VIDEO && video_stream_index == -1)
+		if (media_type == AVMEDIA_TYPE_VIDEO && !video_stream_index_found)
 		{
 			video_stream_index = i;
+			video_stream_index_found = true;
 			break;
 		}
 	}
 
-	if (video_stream_index >= 0)
-	{
-		if (stream_component_open(video_stream_index, NULL, NULL) < 0)
-		{
-			fprintf(stderr, "%s: could not open video codecs.\n", is->filename);
-			return -1;
-		}
-
-	}
-	else
-	{
+	if (!video_stream_index_found) {
 		fprintf(stderr, "%s: could not find video stream.\n", is->filename);
 		return -1;
+	}
+	
+	if (stream_component_open(video_stream_index, NULL, NULL) < 0)
+	{
+		fprintf(stderr, "%s: could not open video codecs.\n", is->filename);
+		return -2;
 	}
 
 	return 0;
@@ -236,6 +241,7 @@ static int open_video_decoder()
 
 static SDL_Thread *parse_tid = NULL;
 
+//open audio file
 //@param[in] filename: audio to be played
 //@param[in] sa_desired: audio sepc desired
 //			sa_desired.channels:	SA_CH_LAYOUT_MONO, SA_CH_LAYOUT_STEREO
@@ -247,22 +253,21 @@ static SDL_Thread *parse_tid = NULL;
 //			sa_obtained.format:		SA_SAMPLE_FMT_S16, SA_SAMPLE_FMT_FLT
 //			sa_obtained.samplerate:	audio sample rate
 //			sa_obtained.samples:	audio buffer size in samples (power of 2)
-int silly_audio_open(const char *filename, silly_audiospec *sa_desired, silly_audiospec *sa_obtained)
+//return 0 on success, negative on error
+int silly_audio_open(const char *filename, const silly_audiospec *sa_desired, silly_audiospec *sa_obtained)
 {
-	if (filename == 0 || *filename == 0)
+	if (active)
 		return -1;
-	if (!sa_desired)
+	if (filename == 0 || *filename == 0)
 		return -2;
+	if (!sa_desired)
+		return -3;
 
 	is = av_mallocz(sizeof(VideoState)); //memory allocation with alignment, why???
 	is->audio_stream_index = -1;
 	is->video_stream_index = -1;
 	strncpy(is->filename, filename, sizeof(is->filename));
 	is->seek_pos_sec = 0;
-
-	pthread_mutex_init_value(&is->audio_ring_mutex);
-	if (pthread_mutex_init(&is->audio_ring_mutex, NULL) != 0)
-		return -3;
 
 	//register all formats & codecs
 	av_register_all();
@@ -294,11 +299,197 @@ int silly_audio_open(const char *filename, silly_audiospec *sa_desired, silly_au
 
 	SDL_PauseAudio(0);
 
+	active = true;
+
 	return 0;
 }
 
+//close audio file
+void silly_audio_close()
+{
+	if (!active)
+		return;
+
+	if (is->active_fetch)
+		silly_audio_fetch_stop();
+
+	global_exit = 1;
+	global_exit_parse = 1;
+
+	SDL_WaitThread(parse_tid, NULL);
+
+	SDL_Quit();
+
+	av_free(is);
+	is = NULL;
+
+	active = false;
+}
+
+//pause playing
+void silly_audio_pause()
+{
+	if (!active) return;
+
+	SDL_PauseAudio(1);
+}
+
+//resume playing
+void silly_audio_resume()
+{
+	if (!active) return;
+
+	SDL_PauseAudio(0);
+}
+
+//seek audio sec
+//@param[in] sec: seek position in second(s)
+//return 0 on success, negative on error
+int silly_audio_seek(int sec)
+{
+	if (!active) return -1;
+
+	global_exit_parse = 1;
+	SDL_WaitThread(parse_tid, NULL);
+	global_exit_parse = 0;
+
+	is->seek_pos_sec = sec;
+	parse_tid = SDL_CreateThread(parse_thread, "SILLY_PLAYER_PARSING_THREAD", is);
+	if (!parse_tid) {
+		fprintf(stderr, "create parsing thread failed.\n");
+		av_free(is);
+		return -2;
+	}
+
+	SDL_PauseAudio(0);
+
+	return 0;
+}
+
+//get current position (in sec) of playing
+//return the current position in second(s), negative on error
+double silly_audio_time()
+{
+	if (!active) return -1.0;
+
+	return get_audio_clock(is);
+}
+
+static DARRAY(float) audio_fetch_array;	//used for conversion in 'audio fetching'
+
+//start fetching audio samples
+//@param[in] channels: SA_CH_LAYOUT_MONO / SA_CH_LAYOUT_STEREO
+//@param[in] samplerate: samplerate required
+int silly_audio_fetch_start(int channels, int samplerate)
+{
+	if (!active) return -1;
+	if (is->active_fetch) return -2;
+
+	is->channels_fetch = channels;
+	is->samplerate_fetch = samplerate;
+
+	is->swr_ctx_fetch = swr_alloc();
+	if (!is->swr_ctx_fetch) return -3;
+
+	is->swr_ctx_fetch = swr_alloc_set_opts(is->swr_ctx_fetch,
+		is->channels_fetch == SA_CH_LAYOUT_MONO ? AV_CH_LAYOUT_MONO : AV_CH_LAYOUT_STEREO,	//out_ch_layout
+		AV_SAMPLE_FMT_FLT,																	//out_sample_fmt
+		is->samplerate_fetch,																	//out_sample_rate
+		is->audiospec.channels == SA_CH_LAYOUT_MONO ? AV_CH_LAYOUT_MONO : AV_CH_LAYOUT_STEREO,	//in_ch_layout
+		is->audiospec.format == SA_SAMPLE_FMT_S16 ? AV_SAMPLE_FMT_S16 : AV_SAMPLE_FMT_FLT,		//in_sample_fmt
+		is->audiospec.samplerate,																//in_sample_rate
+		0,		//log_offset
+		NULL	//log_ctx
+		);
+	swr_init(is->swr_ctx_fetch);
+
+	pthread_mutex_init_value(&is->audio_fetch_buffer_mutex);
+	if (pthread_mutex_init(&is->audio_fetch_buffer_mutex, NULL) != 0)
+		return -4;
+
+	is->active_fetch = true;
+
+	return 0;
+}
+
+//fill sample_buffer with audio samples given the samplerate
+//@param[in] sample_buffer: buffer to be filled
+//@param[in] sample_buffer_size: size (# of floats) of buffer to be filled
+//@param[in] blocking
+int silly_audio_fetch(float *sample_buffer, int sample_buffer_size, bool blocking)
+{
+	if (!active) return -1;
+	if (!is->active_fetch) return -2;
+
+	int to_channels = is->channels_fetch == SA_CH_LAYOUT_MONO ? 1 : 2;
+	int to_samplerate = is->samplerate_fetch;
+	int to_sample_buffer_size = sample_buffer_size;	//# of floats
+
+	int from_channels = is->audiospec.channels == SA_CH_LAYOUT_MONO ? 1 : 2;
+	int from_samplerate = is->audiospec.samplerate;
+	int from_sample_buffer_size = //# of floats
+			(float)to_sample_buffer_size 
+			* ((float)from_samplerate / (float)to_samplerate)
+			* ((float)from_channels / (float)to_channels);
+
+	while(true) {
+		pthread_mutex_lock(&is->audio_fetch_buffer_mutex);
+		if (is->audio_fetch_buffer.size >= from_sample_buffer_size * sizeof(float)) {
+			pthread_mutex_unlock(&is->audio_fetch_buffer_mutex);
+			break;
+		}
+		pthread_mutex_unlock(&is->audio_fetch_buffer_mutex);
+
+		if (!blocking) {
+			return -3;
+		}
+		os_sleep_ms(5);
+	}
+
+	if (!is->active_fetch) return -4;
+
+	//pop out to is->audio_fetch
+	da_resize(audio_fetch_array, from_sample_buffer_size * sizeof(float)); //is->audio_fetch.num: in bytes
+
+	pthread_mutex_lock(&is->audio_fetch_buffer_mutex);
+	circlebuf_pop_front(&is->audio_fetch_buffer, audio_fetch_array.array, from_sample_buffer_size * sizeof(float));
+	pthread_mutex_unlock(&is->audio_fetch_buffer_mutex);
+
+	//is->audio_fetch ==> sample_buffer
+	if (swr_convert(is->swr_ctx_fetch,
+		(uint8_t **)&sample_buffer,				//out
+		sample_buffer_size / to_channels,		//out_count
+		(const uint8_t **)&audio_fetch_array.array,	//in
+		from_sample_buffer_size / from_channels	//in_count
+		) < 0) {
+		fprintf(stderr, "swr_convert: error while converting.\n");
+		return -5;
+	}
+
+	return 0;
+}
+
+//stop fetching audio samples
+void silly_audio_fetch_stop()
+{
+	if (!active) return;
+	if (!is->active_fetch) return;
+
+	is->active_fetch = false;
+
+	swr_free(&is->swr_ctx_fetch);
+	da_free(audio_fetch_array);
+
+	pthread_mutex_destroy(&is->audio_fetch_buffer_mutex);
+	circlebuf_free(&is->audio_fetch_buffer);
+}
+
+//show silly_audiospec
+//@param[in] spec: the audio spec structure to show
 void silly_audio_printspec(const silly_audiospec *spec)
 {
+	if (!spec) return;
+
 	fprintf(stderr, "spec->samples=%d (size of the audio buffer in samples)\n", spec->samples);
 
 	fprintf(stderr, "spec->samplerate=%d (samples per second)\n", spec->samplerate);
@@ -327,53 +518,4 @@ void silly_audio_printspec(const silly_audiospec *spec)
 		fprintf(stderr, "spec->format=SA_SAMPLE_FMT_INVAL\n");
 		break;
 	}
-}
-
-int silly_audio_close()
-{
-	global_exit = 1;
-	global_exit_parse = 1;
-
-	SDL_WaitThread(parse_tid, NULL);
-
-	SDL_Quit();
-
-	pthread_mutex_destroy(&is->audio_ring_mutex);
-	circlebuf_free(&is->audio_ring);
-
-	return 0;
-}
-
-void silly_audio_pause()
-{
-	SDL_PauseAudio(1);
-}
-
-void silly_audio_resume()
-{
-	SDL_PauseAudio(0);
-}
-
-int silly_audio_seek(int sec)
-{
-	global_exit_parse = 1;
-	SDL_WaitThread(parse_tid, NULL);
-	global_exit_parse = 0;
-
-	is->seek_pos_sec = sec;
-	parse_tid = SDL_CreateThread(parse_thread, "SILLY_PLAYER_PARSING_THREAD", is);
-	if (!parse_tid) {
-		fprintf(stderr, "create parsing thread failed.\n");
-		av_free(is);
-		return -1;
-	}
-
-	SDL_PauseAudio(0);
-
-	return 0;
-}
-
-double silly_audio_time()
-{
-	return get_audio_clock(is);
 }

@@ -72,11 +72,11 @@ static int audio_decode_frame(VideoState *is, uint8_t *audio_buf, int audio_buf_
             av_free_packet(is->audio_pkt_ptr); //free on destroy ???
         }
         if(global_exit){
-            return -1;
+            return -2;
         }
 
         if(packet_queue_get(&is->audioq, is->audio_pkt_ptr, 1) < 0){
-            return -1;
+            return -3;
         }
         is->audio_pkt_data = is->audio_pkt_ptr->data;
         is->audio_pkt_size = is->audio_pkt_ptr->size;
@@ -96,7 +96,8 @@ static int total_samples = 0; //total sample number (1 sample: audio data of all
 //'len' bytes should be fed to 'stream'
 void audio_callback(void *userdata, uint8_t *stream, int len){
     VideoState *is = (VideoState *)userdata;
-	size_t actual_len, audio_size;
+	size_t actual_len;
+	int audio_size;
 
 #if PRINT_TOTAL_SAMPLES == 1
 	total_samples += (len / (is->audiospec.channels == SA_CH_LAYOUT_MONO ? 1 : 2) / (is->audiospec.format == SA_SAMPLE_FMT_S16 ? 2 : 4));

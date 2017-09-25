@@ -41,6 +41,11 @@ static int open_input()
 	return 0;
 }
 
+static void close_input()
+{
+	avformat_close_input(&is->pFormatCtx);
+}
+
 static int stream_component_open(unsigned int stream_index, const silly_audiospec *sa_desired, silly_audiospec *sa_obtained)
 {
 	AVCodec *codec = NULL;
@@ -135,9 +140,6 @@ static int stream_component_open(unsigned int stream_index, const silly_audiospe
 		is->audio_pkt_ptr = (AVPacket *)av_malloc(sizeof(AVPacket));
 		av_init_packet(is->audio_pkt_ptr);
 
-		is->audio_buf_size = 0;
-		is->audio_buf_index = 0;
-
 		//prepare conversion facility (FLTP -> S16)
 		//和swr_convert()保持一致: 一个声道最多MAX_AUDIO_FRAME_SIZE字节，假设最多两个声道
 		is->out_buffer = (uint8_t *)av_malloc(MAX_AUDIO_FRAME_SIZE << 1);
@@ -207,6 +209,15 @@ static int open_audio_decoder(const silly_audiospec *sa_desired, silly_audiospec
 	return 0;
 }
 
+static void close_audio_decoder()
+{
+	avcodec_close(is->audio_ctx);
+	avcodec_free_context(&(is->audio_ctx));
+	is->audio_ctx = NULL;
+
+	SDL_CloseAudio();
+}
+
 static int open_video_decoder()
 {
 	unsigned int video_stream_index = -1;
@@ -239,6 +250,13 @@ static int open_video_decoder()
 	return 0;
 }
 
+static void close_video_decoder()
+{
+	avcodec_close(is->video_ctx);
+	avcodec_free_context(&(is->video_ctx));
+	is->video_ctx = NULL;
+}
+
 static SDL_Thread *parse_tid = NULL;
 
 //open audio file
@@ -263,11 +281,16 @@ int silly_audio_open(const char *filename, const silly_audiospec *sa_desired, si
 	if (!sa_desired)
 		return -3;
 
+	global_exit = 0;
+	global_exit_parse = 0;
+
 	is = av_mallocz(sizeof(VideoState)); //memory allocation with alignment, why???
 	is->audio_stream_index = -1;
 	is->video_stream_index = -1;
 	strncpy(is->filename, filename, sizeof(is->filename));
 	is->seek_pos_sec = 0;
+	is->audio_buf_size = 0;
+	is->audio_buf_index = 0;
 
 	//register all formats & codecs
 	av_register_all();
@@ -317,6 +340,10 @@ void silly_audio_close()
 	global_exit_parse = 1;
 
 	SDL_WaitThread(parse_tid, NULL);
+
+	close_audio_decoder();
+
+	close_input();
 
 	SDL_Quit();
 

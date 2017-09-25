@@ -6,7 +6,6 @@ include_directories(${CMAKE_SOURCE_DIR}/silly_player_lib)
 set(${PROJECT_NAME}_SOURCES
 	player_audio.c)
 set(${PROJECT_NAME}_HEADERS
-	../silly_player_lib/c99defs.h
 	../silly_player_lib/silly_player.h)
 
 source_group("${PROJECT_NAME}\\Source Files" FILES ${${PROJECT_NAME}_SOURCES})

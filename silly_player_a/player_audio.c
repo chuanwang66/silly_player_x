@@ -79,11 +79,9 @@ void grab_thread_stop() {
 int main(int argc, char* argv[])
 {
 	char line[128];
-	char cmd;
+	char cmd[128];
 	int sec;
 	int num;
-	double ts;
-	silly_audiospec desired_spec, spec;
 
 	int exit_process = 0;
 
@@ -92,57 +90,65 @@ int main(int argc, char* argv[])
         exit(1);
     }
 
-	desired_spec.channels = SA_CH_LAYOUT_STEREO;
-	desired_spec.format = SA_SAMPLE_FMT_FLT;
-	desired_spec.samplerate = 0;
-	desired_spec.samples = 1024;
-
-	//silly_audio_open(argv[1], &desired_spec, NULL);
-	silly_audio_open(argv[1], &desired_spec, &spec);
-	silly_audio_printspec(&spec);
-	grab_thread_start();
-
 	printf("\npress:\n");
-	printf("\t 'q\\n' to quit\n");
-	printf("\t 'p\\n' to pause\n");
-	printf("\t 'r\\n' to resume\n");
-	printf("\t 's sec\\n' to seek to position\n");
-	printf("\t 't\\n' to query current time\n");
-	printf("\t 'm\\n' to start grabbing samples\n");
-	printf("\t 'n\\n' to stop grabbing samples\n");
+	printf("\t 'start\\n' to start\n");
+	printf("\t 'stop\\n' to stop\n");
+	printf("\t 'pause\\n' to pause\n");
+	printf("\t 'resume\\n' to resume\n");
+	printf("\t 'seek sec\\n' to seek to position\n");
+	printf("\t 'time\\n' to query current time\n");
+	printf("\t 'gstart\\n' to start grabbing samples\n");
+	printf("\t 'gstop\\n' to stop grabbing samples\n");
+	printf("\n");
+	printf("\t 'quit\\n' to quit\n");
 	do {
 		fgets(line, sizeof(line), stdin);
 		if ((num = sscanf(line, "%s %d", &cmd, &sec)) <= 0)
 			continue;
-		switch (cmd) {
-		case 'q':
-			silly_audio_close();
-			exit_process = 1;
-			break;
-		case 'p':
-			silly_audio_pause();
-			break;
-		case 'r':
-			silly_audio_resume();
-			break;
-		case 's':
-			if (num == 2) {
-				printf("seek to %d (sec)\n", sec);
-				silly_audio_seek(sec);
+		if (strcmpi(cmd, "start") == 0) {
+			silly_audiospec desired_spec, spec;
+			desired_spec.channels = SA_CH_LAYOUT_STEREO;
+			desired_spec.format = SA_SAMPLE_FMT_FLT;
+			desired_spec.samplerate = 0;
+			desired_spec.samples = 1024;
+
+			//silly_audio_open(argv[1], &desired_spec, NULL);
+			if (silly_audio_open(argv[1], &desired_spec, &spec) == 0) {
+				silly_audio_printspec(&spec);
+				printf("silly_audio_open() ok\n");
 			}
-			break;
-		case 't':
-			ts = silly_audio_time();
+			else printf("silly_audio_open() failed\n");
+		}
+		else if (strcmpi(cmd, "stop") == 0) {
+			silly_audio_close();
+		}
+		else if (strcmpi(cmd, "pause") == 0) {
+			silly_audio_pause();
+		}
+		else if (strcmpi(cmd, "resume") == 0) {
+			silly_audio_resume();
+		}
+		else if (strcmpi(cmd, "seek") == 0 && num == 2) {
+			if (silly_audio_seek(sec) == 0)
+				printf("seek to %d (sec)\n", sec);
+			else
+				printf("seek failed\n");
+		}
+		else if (strcmpi(cmd, "time") == 0) {
+			double ts = silly_audio_time();
 			printf("current time: %f\n", ts);
-			break;
-		case 'm':
+		}
+		else if (strcmpi(cmd, "gstart") == 0) {
 			grab_thread_start();
-			break;
-		case 'n':
+		}
+		else if (strcmpi(cmd, "gstop") == 0) {
 			grab_thread_stop();
-			break;
-		default:
-			continue;
+		}
+		else if (strcmpi(cmd, "quit") == 0) {
+			grab_thread_stop();
+			silly_audio_close();
+
+			exit_process = 1;
 		}
 	} while (!exit_process);
 

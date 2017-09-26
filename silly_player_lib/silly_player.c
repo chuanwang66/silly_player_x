@@ -22,8 +22,8 @@
 
 extern int global_exit;
 extern int global_exit_parse;
-static VideoState *is = NULL; //global video state
-static bool active = false;
+static volatile VideoState *is = NULL; //global video state
+static volatile bool active = false;
 
 static int open_input()
 {

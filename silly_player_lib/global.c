@@ -1,3 +1,3 @@
 /** global variables shared by multiple files are defined here. **/
-int global_exit;
-int global_exit_parse;
+volatile int global_exit;
+volatile int global_exit_parse;

@@ -402,6 +402,16 @@ double silly_audio_time()
 	return get_audio_clock(is);
 }
 
+//get the audio duration
+//return the duration in second(s)
+double silly_audio_duration()
+{
+	if (!active)	return -1.0;
+
+	int64_t duration = is->pFormatCtx->duration / AV_TIME_BASE;
+	return duration;
+}
+
 static DARRAY(float) audio_fetch_array;	//used for conversion in 'audio fetching'
 
 //start fetching audio samples

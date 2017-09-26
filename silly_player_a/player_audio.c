@@ -97,6 +97,7 @@ int main(int argc, char* argv[])
 	printf("\t 'resume\\n' to resume\n");
 	printf("\t 'seek sec\\n' to seek to position\n");
 	printf("\t 'time\\n' to query current time\n");
+	printf("\t 'duration\\n' to query duration\n");
 	printf("\t 'gstart\\n' to start grabbing samples\n");
 	printf("\t 'gstop\\n' to stop grabbing samples\n");
 	printf("\n");
@@ -137,6 +138,13 @@ int main(int argc, char* argv[])
 		else if (strcmpi(cmd, "time") == 0) {
 			double ts = silly_audio_time();
 			printf("current time: %f\n", ts);
+		}
+		else if (strcmpi(cmd, "duration") == 0) {
+			int duration = silly_audio_duration();
+			int h = duration / 3600;
+			int m = duration / 60 - h * 60;
+			int s = duration - m * 60 - h * 3600;
+			printf("duration time: %d:%d:%d\n", h, m, s);
 		}
 		else if (strcmpi(cmd, "gstart") == 0) {
 			grab_thread_start();

@@ -82,6 +82,7 @@ EXPORT void silly_audio_resume();
 EXPORT int silly_audio_seek(int sec);
 
 EXPORT double silly_audio_time();
+EXPORT double silly_audio_duration();
 
 EXPORT int silly_audio_fetch_start(int channels, int samplerate);
 EXPORT int silly_audio_fetch(float *sample_buffer, int sample_buffer_size, bool blocking);

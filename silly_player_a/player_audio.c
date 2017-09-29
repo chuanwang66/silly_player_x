@@ -131,7 +131,7 @@ int main(int argc, char* argv[])
 			desired_spec.samples = 1024;
 
 			//silly_audio_open(argv[1], &desired_spec, NULL);
-			if ((ret = silly_audio_open(argv[1], &desired_spec, &spec)) == 0) {
+			if ((ret = silly_audio_open(argv[1], &desired_spec, &spec, false)) == 0) {
 				silly_audio_printspec(&spec);
 				printf("silly_audio_open() ok\n");
 			}

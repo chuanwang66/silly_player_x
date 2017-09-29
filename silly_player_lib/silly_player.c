@@ -274,8 +274,9 @@ static SDL_Thread *parse_tid = NULL;
 //			sa_obtained.format:		SA_SAMPLE_FMT_S16, SA_SAMPLE_FMT_FLT
 //			sa_obtained.samplerate:	audio sample rate
 //			sa_obtained.samples:	audio buffer size in samples (power of 2)
+//@param[in] loop: playing in loop-mode or not
 //return 0 on success, negative on error
-int silly_audio_open(const char *filename, const silly_audiospec *sa_desired, silly_audiospec *sa_obtained)
+int silly_audio_open(const char *filename, const silly_audiospec *sa_desired, silly_audiospec *sa_obtained, bool loop)
 {
 	if (active)
 		return -1;
@@ -294,6 +295,7 @@ int silly_audio_open(const char *filename, const silly_audiospec *sa_desired, si
 	is->seek_pos_sec = 0;
 	is->audio_buf_size = 0;
 	is->audio_buf_index = 0;
+	is->loop = loop;
 
 	//register all formats & codecs
 	av_register_all();

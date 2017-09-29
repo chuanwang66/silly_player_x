@@ -6,6 +6,19 @@
 extern int global_exit;
 extern int global_exit_parse;
 
+void seek_to(VideoState *is, uint32_t seek_pos_sec)
+{
+	AVRational time_base = is->audio_st->time_base;
+	int64_t seek_time = is->audio_st->start_time + av_rescale(seek_pos_sec, time_base.den, time_base.num);
+
+	if (seek_time > is->audio_st->cur_dts) {
+		av_seek_frame(is->pFormatCtx, is->audio_stream_index, seek_time, AVSEEK_FLAG_ANY);
+	}
+	else {
+		av_seek_frame(is->pFormatCtx, is->audio_stream_index, seek_time, AVSEEK_FLAG_ANY | AVSEEK_FLAG_BACKWARD);
+	}
+}
+
 int parse_thread(void *arg)
 {
     VideoState *is = (VideoState *)arg;
@@ -15,20 +28,7 @@ int parse_thread(void *arg)
     //seek to position (audio seeking supported ONLY)
     packet_queue_clear(&is->audioq);
 
-    AVRational time_base = is->audio_st->time_base;
-    //printf("seek_target==%d/%d\n", time_base.num, time_base.den);
-    //printf("start_time==%d\n", is->audio_st->start_time);
-    //printf("0===%d\n", av_rescale(0, time_base.den, time_base.num));
-    //printf("1===%d\n", av_rescale(1, time_base.den, time_base.num));
-    //printf("2===%d\n", av_rescale(2, time_base.den, time_base.num));
-    int64_t seek_time = is->audio_st->start_time + av_rescale(is->seek_pos_sec, time_base.den, time_base.num);
-    //printf("seek_time=%d, cur_dts=%d\n", seek_time, is->audio_st->cur_dts);
-    if(seek_time > is->audio_st->cur_dts) {
-        av_seek_frame(is->pFormatCtx, is->audio_stream_index, seek_time, AVSEEK_FLAG_ANY);
-    } else {
-        av_seek_frame(is->pFormatCtx, is->audio_stream_index, seek_time, AVSEEK_FLAG_ANY | AVSEEK_FLAG_BACKWARD);
-    }
-
+	seek_to(is, is->seek_pos_sec);
 
     for(;;)
     {
@@ -45,8 +45,14 @@ int parse_thread(void *arg)
         {
 			if (ret == AVERROR_EOF || url_feof(is->pFormatCtx->pb))
 			{
-				global_exit_parse = 1;
-				break;
+				if (!is->loop) {
+					global_exit_parse = 1;
+					break;
+				}
+				else {
+					seek_to(is, 0);
+					continue;
+				}
 			}
 
             if(is->pFormatCtx->pb->error == 0)

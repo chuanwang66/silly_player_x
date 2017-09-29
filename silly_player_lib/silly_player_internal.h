@@ -28,6 +28,7 @@ typedef struct VideoPicture{
 typedef struct VideoState{
 	AVFormatContext *pFormatCtx;
 	struct SwsContext *sws_ctx;
+	volatile bool loop;
 
 	/** ************** audio related ************** */
 	int audio_stream_index;

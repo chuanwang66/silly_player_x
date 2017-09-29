@@ -1,0 +1,3 @@
+ffmpeg -i choosing_44100_stereo.mp3 -vn -ar 48000 -ac 2 -ab 320k -f mp3 choosing_48000_stereo.mp3
+ffmpeg -i choosing_44100_stereo.mp3 -vn -ar 44100 -ac 1 -ab 64k -f mp3 choosing_44100_mono.mp3
+ffmpeg -i choosing_44100_stereo.mp3 -vn -ar 48000 -ac 1 -ab 64k -f mp3 choosing_48000_mono.mp3

@@ -39,6 +39,7 @@ float sample_buffer[FRAMERATE << 1];	//这个缓冲尽量不要太大(100ms级别)，以免对is
 int sample_buffer_size = sizeof(sample_buffer) / sizeof(sample_buffer[0]);
 
 HANDLE grab_thread;
+volatile bool grab_active = FALSE;
 volatile bool grab_stop = FALSE;
 DWORD WINAPI grab_thread_proc(LPVOID lpParam)
 {
@@ -63,17 +64,32 @@ DWORD WINAPI grab_thread_proc(LPVOID lpParam)
 }
 
 void grab_thread_start() {
+	if (grab_active) {
+		fprintf(stderr, "already started\n");
+		return;
+	}
+
 	grab_stop = FALSE;
 	grab_thread = CreateThread(NULL, 0, grab_thread_proc, NULL, 0, NULL);
 	if (grab_thread == NULL) {
 		fprintf(stderr, "create thread failed.\n");
 	}
+	else {
+		grab_active = TRUE;
+	}
 }
 
 void grab_thread_stop() {
+	if (!grab_active) {
+		fprintf(stderr, "already stopped\n");
+		return;
+	}
+
 	grab_stop = TRUE;
 	WaitForSingleObject(grab_thread, INFINITE);
 	CloseHandle(grab_thread);
+
+	grab_active = FALSE;
 }
 
 int main(int argc, char* argv[])
@@ -107,6 +123,7 @@ int main(int argc, char* argv[])
 		if ((num = sscanf(line, "%s %d", &cmd, &sec)) <= 0)
 			continue;
 		if (strcmpi(cmd, "start") == 0) {
+			int ret;
 			silly_audiospec desired_spec, spec;
 			desired_spec.channels = SA_CH_LAYOUT_STEREO;
 			desired_spec.format = SA_SAMPLE_FMT_FLT;
@@ -114,11 +131,11 @@ int main(int argc, char* argv[])
 			desired_spec.samples = 1024;
 
 			//silly_audio_open(argv[1], &desired_spec, NULL);
-			if (silly_audio_open(argv[1], &desired_spec, &spec) == 0) {
+			if ((ret = silly_audio_open(argv[1], &desired_spec, &spec)) == 0) {
 				silly_audio_printspec(&spec);
 				printf("silly_audio_open() ok\n");
 			}
-			else printf("silly_audio_open() failed\n");
+			else printf("silly_audio_open() failed: %d\n", ret);
 		}
 		else if (strcmpi(cmd, "stop") == 0) {
 			silly_audio_close();

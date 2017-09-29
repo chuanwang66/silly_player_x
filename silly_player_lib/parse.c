@@ -10,6 +10,7 @@ int parse_thread(void *arg)
 {
     VideoState *is = (VideoState *)arg;
     AVPacket pkt1, *packet = &pkt1;
+	int ret;
 
     //seek to position (audio seeking supported ONLY)
     packet_queue_clear(&is->audioq);
@@ -40,8 +41,14 @@ int parse_thread(void *arg)
             SDL_Delay(10);
             continue;
         }
-        if(av_read_frame(is->pFormatCtx, packet) < 0)
+        if((ret = av_read_frame(is->pFormatCtx, packet)) < 0)
         {
+			if (ret == AVERROR_EOF || url_feof(is->pFormatCtx->pb))
+			{
+				global_exit_parse = 1;
+				break;
+			}
+
             if(is->pFormatCtx->pb->error == 0)
             {
                 SDL_Delay(100); /* no error; wait for user input */
@@ -49,6 +56,7 @@ int parse_thread(void *arg)
             }
             else
             {
+				global_exit_parse = 1;
                 break;
             }
         }
@@ -73,11 +81,5 @@ int parse_thread(void *arg)
         SDL_Delay(100);
     }
 
-    /* free facilities for audio/video playing */
-    if(global_exit)
-    {
-        av_free(is->out_buffer);
-        swr_free(&is->swr_ctx);
-    }
     return 0;
 }

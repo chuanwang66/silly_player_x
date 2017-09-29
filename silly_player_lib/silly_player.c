@@ -215,6 +215,9 @@ static void close_audio_decoder()
 	avcodec_free_context(&(is->audio_ctx));
 	is->audio_ctx = NULL;
 
+	av_free(is->out_buffer);
+	swr_free(&is->swr_ctx);
+
 	SDL_CloseAudio();
 }
 
@@ -381,7 +384,7 @@ int silly_audio_seek(int sec)
 	global_exit_parse = 0;
 
 	is->seek_pos_sec = sec;
-	parse_tid = SDL_CreateThread(parse_thread, "SILLY_PLAYER_PARSING_THREAD", is);
+	parse_tid = SDL_CreateThread(parse_thread, "PARSING_THREAD", is);
 	if (!parse_tid) {
 		fprintf(stderr, "create parsing thread failed.\n");
 		av_free(is);
@@ -455,6 +458,11 @@ int silly_audio_fetch_start(int channels, int samplerate)
 //@param[in] blocking
 int silly_audio_fetch(float *sample_buffer, int sample_buffer_size, bool blocking)
 {
+	memset(sample_buffer, 0, sample_buffer_size * sizeof(float));
+	return silly_audio_fetch_internal(sample_buffer, sample_buffer_size, blocking);
+}
+int silly_audio_fetch_internal(float *sample_buffer, int sample_buffer_size, bool blocking)
+{
 	if (!active) return -1;
 	if (!is->active_fetch) return -2;
 
@@ -480,15 +488,23 @@ int silly_audio_fetch(float *sample_buffer, int sample_buffer_size, bool blockin
 		if (!blocking) {
 			return -3;
 		}
+
+		if (global_exit_parse) {
+			return -4;
+		}
 		os_sleep_ms(5);
 	}
 
-	if (!is->active_fetch) return -4;
+	if (!is->active_fetch) return -5;
 
 	//pop out to is->audio_fetch
 	da_resize(audio_fetch_array, from_sample_buffer_size * sizeof(float)); //is->audio_fetch.num: in bytes
 
 	pthread_mutex_lock(&is->audio_fetch_buffer_mutex);
+	if (is->audio_fetch_buffer.size < from_sample_buffer_size * sizeof(float)) {
+		pthread_mutex_unlock(&is->audio_fetch_buffer_mutex);
+		return -6;
+	}
 	circlebuf_pop_front(&is->audio_fetch_buffer, audio_fetch_array.array, from_sample_buffer_size * sizeof(float));
 	pthread_mutex_unlock(&is->audio_fetch_buffer_mutex);
 
@@ -500,7 +516,7 @@ int silly_audio_fetch(float *sample_buffer, int sample_buffer_size, bool blockin
 		from_sample_buffer_size / from_channels	//in_count
 		) < 0) {
 		fprintf(stderr, "swr_convert: error while converting.\n");
-		return -5;
+		return -7;
 	}
 
 	return 0;
@@ -517,8 +533,11 @@ void silly_audio_fetch_stop()
 	swr_free(&is->swr_ctx_fetch);
 	da_free(audio_fetch_array);
 
-	pthread_mutex_destroy(&is->audio_fetch_buffer_mutex);
+	pthread_mutex_lock(&is->audio_fetch_buffer_mutex);
 	circlebuf_free(&is->audio_fetch_buffer);
+	pthread_mutex_unlock(&is->audio_fetch_buffer_mutex);
+
+	pthread_mutex_destroy(&is->audio_fetch_buffer_mutex);
 }
 
 //show silly_audiospec

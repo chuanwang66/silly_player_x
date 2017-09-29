@@ -96,7 +96,7 @@ int main(int argc, char* argv[])
 {
 	char line[128];
 	char cmd[128];
-	int sec;
+	int param1;
 	int num;
 
 	int exit_process = 0;
@@ -112,6 +112,7 @@ int main(int argc, char* argv[])
 	printf("\t 'pause\\n' to pause\n");
 	printf("\t 'resume\\n' to resume\n");
 	printf("\t 'seek sec\\n' to seek to position\n");
+	printf("\t 'loop 0/1\\n' to enable looping\n");
 	printf("\t 'time\\n' to query current time\n");
 	printf("\t 'duration\\n' to query duration\n");
 	printf("\t 'gstart\\n' to start grabbing samples\n");
@@ -120,7 +121,7 @@ int main(int argc, char* argv[])
 	printf("\t 'quit\\n' to quit\n");
 	do {
 		fgets(line, sizeof(line), stdin);
-		if ((num = sscanf(line, "%s %d", &cmd, &sec)) <= 0)
+		if ((num = sscanf(line, "%s %d", &cmd, &param1)) <= 0)
 			continue;
 		if (strcmpi(cmd, "start") == 0) {
 			int ret;
@@ -147,10 +148,13 @@ int main(int argc, char* argv[])
 			silly_audio_resume();
 		}
 		else if (strcmpi(cmd, "seek") == 0 && num == 2) {
-			if (silly_audio_seek(sec) == 0)
-				printf("seek to %d (sec)\n", sec);
+			if (silly_audio_seek(param1) == 0)
+				printf("seek to %d (sec)\n", param1);
 			else
 				printf("seek failed\n");
+		}
+		else if (strcmpi(cmd, "loop") == 0 && num == 2) {
+			silly_audio_loop(param1 == 0 ? false: true);
 		}
 		else if (strcmpi(cmd, "time") == 0) {
 			double ts = silly_audio_time();

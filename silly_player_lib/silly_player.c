@@ -407,6 +407,13 @@ double silly_audio_time()
 	return get_audio_clock(is);
 }
 
+void silly_audio_loop(bool enable)
+{
+	if (!active) return;
+
+	is->loop = enable;
+}
+
 //get the audio duration
 //return the duration in second(s)
 double silly_audio_duration()

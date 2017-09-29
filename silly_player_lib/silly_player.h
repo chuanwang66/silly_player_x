@@ -81,6 +81,8 @@ EXPORT void silly_audio_resume();
 
 EXPORT int silly_audio_seek(int sec);
 
+EXPORT void silly_audio_loop(bool enable);
+
 EXPORT double silly_audio_time();
 EXPORT double silly_audio_duration();
 

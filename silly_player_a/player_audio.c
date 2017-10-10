@@ -30,12 +30,24 @@ int LogOnce(const char* strFile, const void* buf, int nBufSize)
 	return 1;
 }
 
-#define SAMPLERATE 48000
+//您只需要修改已下3个宏，就可以测试各种情况
+#define USE_MONO 0			//1:mono,  0:stereo
+#define SAMPLERATE 44100
 #define FRAMERATE 10240
 
+#if USE_MONO == 1
+int channels = SA_CH_LAYOUT_MONO;
+#else
 int channels = SA_CH_LAYOUT_STEREO;
+#endif
+
 int samplerate = SAMPLERATE;
+#if USE_MONO == 1
+float sample_buffer[FRAMERATE];
+#else
 float sample_buffer[FRAMERATE << 1];	//这个缓冲尽量不要太大(100ms级别)，以免对is->audio_fetch_buffer太敏感
+#endif
+
 int sample_buffer_size = sizeof(sample_buffer) / sizeof(sample_buffer[0]);
 
 HANDLE grab_thread;
@@ -43,7 +55,7 @@ volatile bool grab_active = FALSE;
 volatile bool grab_stop = FALSE;
 DWORD WINAPI grab_thread_proc(LPVOID lpParam)
 {
-	int tick = 1000 * ((float)FRAMERATE / (float)SAMPLERATE); //* 0.9;
+	int tick = 1000 * ((float)FRAMERATE / (float)samplerate); //* 0.9;
 
 	silly_audio_fetch_start(channels, samplerate);
 	while (!grab_stop) {
@@ -102,7 +114,7 @@ int main(int argc, char* argv[])
 	int exit_process = 0;
 
     if(argc != 2) {
-        fprintf(stderr, "usage: $PROG_NAME $VIDEO_FILE_NAME.\n");
+        fprintf(stderr, "usage: %s $VIDEO_FILE_NAME.\n", argv[0]);
         exit(1);
     }
 

@@ -485,6 +485,8 @@ int silly_audio_fetch_internal(float *sample_buffer, int sample_buffer_size, boo
 			(float)to_sample_buffer_size 
 			* ((float)from_samplerate / (float)to_samplerate)
 			* ((float)from_channels / (float)to_channels);
+	if (from_sample_buffer_size & 1 != 0)
+		++ from_sample_buffer_size;
 
 	while(true) {
 		pthread_mutex_lock(&is->audio_fetch_buffer_mutex);
@@ -520,7 +522,7 @@ int silly_audio_fetch_internal(float *sample_buffer, int sample_buffer_size, boo
 	//is->audio_fetch ==> sample_buffer
 	if (swr_convert(is->swr_ctx_fetch,
 		(uint8_t **)&sample_buffer,				//out
-		sample_buffer_size / to_channels,		//out_count
+		to_sample_buffer_size / to_channels,		//out_count
 		(const uint8_t **)&audio_fetch_array.array,	//in
 		from_sample_buffer_size / from_channels	//in_count
 		) < 0) {

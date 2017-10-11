@@ -380,7 +380,7 @@ void silly_audio_resume()
 //return 0 on success, negative on error
 int silly_audio_seek(int sec)
 {
-	if (!active || global_exit_parse) return -1;
+	if (!active) return -1;
 
 	global_exit_parse = 1;
 	SDL_WaitThread(parse_tid, NULL);
@@ -404,7 +404,7 @@ int silly_audio_seek(int sec)
 double silly_audio_time()
 {
 	if (!active) return -1.0;						//in-active
-	if (active && global_exit_parse) return -2.0;	//active & finished
+	//if (active && global_exit_parse) return -2.0;	//active & finished ==> audio is still playing while parsing is finished
 
 	return get_audio_clock(is);
 }
@@ -412,7 +412,10 @@ double silly_audio_time()
 void silly_audio_loop(bool enable)
 {
 	if (!active) return;						//in-active
-	if (active && global_exit_parse) return;	//active & finished
+	if (active && global_exit_parse) { //active & finished
+		printf("loop failed\n");	//TODO
+		return;
+	}
 
 	is->loop = enable;
 }

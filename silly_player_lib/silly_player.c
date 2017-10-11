@@ -22,8 +22,9 @@
 
 extern int global_exit;
 extern int global_exit_parse;
+extern int active = 0;
+
 static volatile VideoState *is = NULL; //global video state
-static volatile bool active = false;
 
 static int open_input()
 {
@@ -327,7 +328,7 @@ int silly_audio_open(const char *filename, const silly_audiospec *sa_desired, si
 
 	SDL_PauseAudio(0);
 
-	active = true;
+	active = 1;
 
 	return 0;
 }
@@ -355,13 +356,13 @@ void silly_audio_close()
 	av_free(is);
 	is = NULL;
 
-	active = false;
+	active = 0;
 }
 
 //pause playing
 void silly_audio_pause()
 {
-	if (!active) return;
+	if (!active || global_exit_parse) return;
 
 	SDL_PauseAudio(1);
 }
@@ -369,7 +370,7 @@ void silly_audio_pause()
 //resume playing
 void silly_audio_resume()
 {
-	if (!active) return;
+	if (!active || global_exit_parse) return;
 
 	SDL_PauseAudio(0);
 }
@@ -379,7 +380,7 @@ void silly_audio_resume()
 //return 0 on success, negative on error
 int silly_audio_seek(int sec)
 {
-	if (!active) return -1;
+	if (!active || global_exit_parse) return -1;
 
 	global_exit_parse = 1;
 	SDL_WaitThread(parse_tid, NULL);
@@ -402,14 +403,16 @@ int silly_audio_seek(int sec)
 //return the current position in second(s), negative on error
 double silly_audio_time()
 {
-	if (!active) return -1.0;
+	if (!active) return -1.0;						//in-active
+	if (active && global_exit_parse) return -2.0;	//active & finished
 
 	return get_audio_clock(is);
 }
 
 void silly_audio_loop(bool enable)
 {
-	if (!active) return;
+	if (!active) return;						//in-active
+	if (active && global_exit_parse) return;	//active & finished
 
 	is->loop = enable;
 }
@@ -431,14 +434,15 @@ static DARRAY(float) audio_fetch_array;	//used for conversion in 'audio fetching
 //@param[in] samplerate: samplerate required
 int silly_audio_fetch_start(int channels, int samplerate)
 {
-	if (!active) return -1;
-	if (is->active_fetch) return -2;
+	if (!active) return -1;							//in-active
+	if (active && global_exit_parse) return -2;		//active & finished
+	if (is->active_fetch) return -3;
 
 	is->channels_fetch = channels;
 	is->samplerate_fetch = samplerate;
 
 	is->swr_ctx_fetch = swr_alloc();
-	if (!is->swr_ctx_fetch) return -3;
+	if (!is->swr_ctx_fetch) return -4;
 
 	is->swr_ctx_fetch = swr_alloc_set_opts(is->swr_ctx_fetch,
 		is->channels_fetch == SA_CH_LAYOUT_MONO ? AV_CH_LAYOUT_MONO : AV_CH_LAYOUT_STEREO,	//out_ch_layout
@@ -454,7 +458,7 @@ int silly_audio_fetch_start(int channels, int samplerate)
 
 	pthread_mutex_init_value(&is->audio_fetch_buffer_mutex);
 	if (pthread_mutex_init(&is->audio_fetch_buffer_mutex, NULL) != 0)
-		return -4;
+		return -5;
 
 	is->active_fetch = true;
 
@@ -472,8 +476,9 @@ int silly_audio_fetch(float *sample_buffer, int sample_buffer_size, bool blockin
 }
 int silly_audio_fetch_internal(float *sample_buffer, int sample_buffer_size, bool blocking)
 {
-	if (!active) return -1;
-	if (!is->active_fetch) return -2;
+	if (!active) return -1;						//in-active
+	if (active && global_exit_parse) return -2;	//active & finished
+	if (!is->active_fetch) return -3;
 
 	int to_channels = is->channels_fetch == SA_CH_LAYOUT_MONO ? 1 : 2;
 	int to_samplerate = is->samplerate_fetch;
@@ -497,16 +502,16 @@ int silly_audio_fetch_internal(float *sample_buffer, int sample_buffer_size, boo
 		pthread_mutex_unlock(&is->audio_fetch_buffer_mutex);
 
 		if (!blocking) {
-			return -3;
+			return -4;
 		}
 
 		if (global_exit_parse) {
-			return -4;
+			return -5;
 		}
 		os_sleep_ms(5);
 	}
 
-	if (!is->active_fetch) return -5;
+	if (!is->active_fetch) return -6;
 
 	//pop out to is->audio_fetch
 	da_resize(audio_fetch_array, from_sample_buffer_size * sizeof(float)); //is->audio_fetch.num: in bytes
@@ -514,7 +519,7 @@ int silly_audio_fetch_internal(float *sample_buffer, int sample_buffer_size, boo
 	pthread_mutex_lock(&is->audio_fetch_buffer_mutex);
 	if (is->audio_fetch_buffer.size < from_sample_buffer_size * sizeof(float)) {
 		pthread_mutex_unlock(&is->audio_fetch_buffer_mutex);
-		return -6;
+		return -7;
 	}
 	circlebuf_pop_front(&is->audio_fetch_buffer, audio_fetch_array.array, from_sample_buffer_size * sizeof(float));
 	pthread_mutex_unlock(&is->audio_fetch_buffer_mutex);
@@ -527,7 +532,7 @@ int silly_audio_fetch_internal(float *sample_buffer, int sample_buffer_size, boo
 		from_sample_buffer_size / from_channels	//in_count
 		) < 0) {
 		fprintf(stderr, "swr_convert: error while converting.\n");
-		return -7;
+		return -8;
 	}
 
 	return 0;
@@ -537,6 +542,7 @@ int silly_audio_fetch_internal(float *sample_buffer, int sample_buffer_size, boo
 void silly_audio_fetch_stop()
 {
 	if (!active) return;
+	if (active && global_exit_parse) return;
 	if (!is->active_fetch) return;
 
 	is->active_fetch = false;

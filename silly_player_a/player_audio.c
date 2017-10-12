@@ -119,8 +119,8 @@ int main(int argc, char* argv[])
     }
 
 	printf("\npress:\n");
-	printf("\t 'start\\n' to start\n");
-	printf("\t 'stop\\n' to stop\n");
+	printf("\t 'open\\n' to start\n");
+	printf("\t 'close\\n' to stop\n");
 	printf("\t 'pause\\n' to pause\n");
 	printf("\t 'resume\\n' to resume\n");
 	printf("\t 'seek sec\\n' to seek to position\n");
@@ -135,7 +135,7 @@ int main(int argc, char* argv[])
 		fgets(line, sizeof(line), stdin);
 		if ((num = sscanf(line, "%s %d", &cmd, &param1)) <= 0)
 			continue;
-		if (strcmpi(cmd, "start") == 0) {
+		if (strcmpi(cmd, "open") == 0) {
 			int ret;
 			silly_audiospec desired_spec, spec;
 			desired_spec.channels = SA_CH_LAYOUT_STEREO;
@@ -150,7 +150,7 @@ int main(int argc, char* argv[])
 			}
 			else printf("silly_audio_open() failed: %d\n", ret);
 		}
-		else if (strcmpi(cmd, "stop") == 0) {
+		else if (strcmpi(cmd, "close") == 0) {
 			silly_audio_close();
 		}
 		else if (strcmpi(cmd, "pause") == 0) {

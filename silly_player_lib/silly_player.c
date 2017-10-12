@@ -83,7 +83,7 @@ static int stream_component_open(unsigned int stream_index, const silly_audiospe
 		desired_spec.silence = 0;
 		desired_spec.samples = sa_desired->samples;
 
-		desired_spec.callback = audio_callback;
+		desired_spec.callback = audio_callback;	//TODO use 'SDL_QueueAudio()' instead in a non-callback way
 		desired_spec.userdata = is;
 
 		if (SDL_OpenAudio(&desired_spec, &spec) < 0)

@@ -12,6 +12,7 @@
 //#define SHOW_AUDIO_FRAME
 
 extern int global_exit;
+extern int active;
 
 static float cmid(float x, float min, float max){
     return (x<min) ? min : ((x>max) ? max: x);
@@ -98,6 +99,9 @@ void audio_callback(void *userdata, uint8_t *stream, int len){
     VideoState *is = (VideoState *)userdata;
 	size_t actual_len;
 	int audio_size;
+
+	if(!active)
+		return;
 
 #if PRINT_TOTAL_SAMPLES == 1
 	total_samples += (len / (is->audiospec.channels == SA_CH_LAYOUT_MONO ? 1 : 2) / (is->audiospec.format == SA_SAMPLE_FMT_S16 ? 2 : 4));

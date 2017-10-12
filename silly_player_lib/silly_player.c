@@ -22,7 +22,7 @@
 
 extern int global_exit;
 extern int global_exit_parse;
-extern int active = 0;
+extern int active;
 
 static volatile VideoState *is = NULL; //global video state
 
@@ -338,6 +338,7 @@ void silly_audio_close()
 {
 	if (!active)
 		return;
+	active = 0;
 
 	if (is->active_fetch)
 		silly_audio_fetch_stop();
@@ -355,8 +356,6 @@ void silly_audio_close()
 
 	av_free(is);
 	is = NULL;
-
-	active = 0;
 }
 
 //pause playing

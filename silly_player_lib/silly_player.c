@@ -23,6 +23,7 @@
 extern int global_exit;
 extern int global_exit_parse;
 extern int active;
+extern int pause_on;
 
 static volatile VideoState *is = NULL; //global video state
 
@@ -318,15 +319,21 @@ int silly_audio_open(const char *filename, const silly_audiospec *sa_desired, si
 		return -6;
 	}
 
+	//init fetch
+	pthread_mutex_init_value(&is->audio_fetch_buffer_mutex);
+	if (pthread_mutex_init(&is->audio_fetch_buffer_mutex, NULL) != 0)
+		return -7;
+
 	//parsing thread (reading packets from stream)
 	parse_tid = SDL_CreateThread(parse_thread, "PARSING_THREAD", is);
 	if (!parse_tid) {
 		fprintf(stderr, "create parsing thread failed.\n");
 		av_free(is);
-		return -7;
+		return -8;
 	}
 
 	SDL_PauseAudio(0);
+	pause_on = 0;
 
 	active = 1;
 
@@ -342,6 +349,7 @@ void silly_audio_close()
 
 	if (is->active_fetch)
 		silly_audio_fetch_stop();
+	pthread_mutex_destroy(&is->audio_fetch_buffer_mutex);
 
 	global_exit = 1;
 	global_exit_parse = 1;
@@ -364,6 +372,7 @@ void silly_audio_pause()
 	if (!active || global_exit_parse) return;
 
 	SDL_PauseAudio(1);
+	pause_on = 1;
 }
 
 //resume playing
@@ -372,6 +381,7 @@ void silly_audio_resume()
 	if (!active || global_exit_parse) return;
 
 	SDL_PauseAudio(0);
+	pause_on = 0;
 }
 
 //seek audio sec
@@ -394,6 +404,7 @@ int silly_audio_seek(int sec)
 	}
 
 	SDL_PauseAudio(0);
+	pause_on = 0;
 
 	return 0;
 }
@@ -458,10 +469,6 @@ int silly_audio_fetch_start(int channels, int samplerate)
 		);
 	swr_init(is->swr_ctx_fetch);
 
-	pthread_mutex_init_value(&is->audio_fetch_buffer_mutex);
-	if (pthread_mutex_init(&is->audio_fetch_buffer_mutex, NULL) != 0)
-		return -5;
-
 	is->active_fetch = true;
 
 	return 0;
@@ -481,6 +488,7 @@ int silly_audio_fetch_internal(float *sample_buffer, int sample_buffer_size, boo
 	if (!active) return -1;						//in-active
 	if (active && global_exit_parse) return -2;	//active & finished
 	if (!is->active_fetch) return -3;
+	if (pause_on) return -4;
 
 	int to_channels = is->channels_fetch == SA_CH_LAYOUT_MONO ? 1 : 2;
 	int to_samplerate = is->samplerate_fetch;
@@ -504,16 +512,16 @@ int silly_audio_fetch_internal(float *sample_buffer, int sample_buffer_size, boo
 		pthread_mutex_unlock(&is->audio_fetch_buffer_mutex);
 
 		if (!blocking) {
-			return -4;
+			return -5;
 		}
 
 		if (global_exit_parse) {
-			return -5;
+			return -6;
 		}
 		os_sleep_ms(5);
 	}
 
-	if (!is->active_fetch) return -6;
+	if (!is->active_fetch) return -7;
 
 	//pop out to is->audio_fetch
 	da_resize(audio_fetch_array, from_sample_buffer_size * sizeof(float)); //is->audio_fetch.num: in bytes
@@ -521,7 +529,7 @@ int silly_audio_fetch_internal(float *sample_buffer, int sample_buffer_size, boo
 	pthread_mutex_lock(&is->audio_fetch_buffer_mutex);
 	if (is->audio_fetch_buffer.size < from_sample_buffer_size * sizeof(float)) {
 		pthread_mutex_unlock(&is->audio_fetch_buffer_mutex);
-		return -7;
+		return -8;
 	}
 	circlebuf_pop_front(&is->audio_fetch_buffer, audio_fetch_array.array, from_sample_buffer_size * sizeof(float));
 	pthread_mutex_unlock(&is->audio_fetch_buffer_mutex);
@@ -534,7 +542,7 @@ int silly_audio_fetch_internal(float *sample_buffer, int sample_buffer_size, boo
 		from_sample_buffer_size / from_channels	//in_count
 		) < 0) {
 		fprintf(stderr, "swr_convert: error while converting.\n");
-		return -8;
+		return -9;
 	}
 
 	return 0;
@@ -555,8 +563,6 @@ void silly_audio_fetch_stop()
 	pthread_mutex_lock(&is->audio_fetch_buffer_mutex);
 	circlebuf_free(&is->audio_fetch_buffer);
 	pthread_mutex_unlock(&is->audio_fetch_buffer_mutex);
-
-	pthread_mutex_destroy(&is->audio_fetch_buffer_mutex);
 }
 
 //show silly_audiospec

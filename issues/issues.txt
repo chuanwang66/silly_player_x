@@ -1,0 +1,4 @@
+SDL2错用系统XAudio2_7.dll导致偶现崩溃：
+	WIN10下：C:\Windows\System32\XAudio2_7.dll -> C:\Windows\SysWOW64\XAudio2_7.dll(记得备份)
+	WIN7下: 用WIN10下C:\Windows\System32\XAudio2_7.dll去覆盖WIN7下的C:\Windows\System32\XAudio2_7.dll
+我这里把WIN10下C:\Windows\System32\XAudio2_7.dll备份了一个在本目录下.

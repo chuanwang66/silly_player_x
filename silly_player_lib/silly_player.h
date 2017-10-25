@@ -91,6 +91,7 @@ EXPORT int silly_audio_fetch(float *sample_buffer, int sample_buffer_size, bool 
 EXPORT void silly_audio_fetch_stop();
 
 EXPORT void silly_audio_printspec(const silly_audiospec *spec);
+EXPORT void silly_audio_fix();
 
 #ifdef __cplusplus
 };

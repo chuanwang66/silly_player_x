@@ -18,7 +18,13 @@
 #include "silly_player.h"
 
 #include "util/darray.h"
+#include "util/dstr.h"
 #include "util/platform.h"
+
+#if defined(_WIN32)
+#include <windows.h>
+#include "util/windows/win-version.h"
+#endif
 
 extern int global_exit;
 extern int global_exit_parse;
@@ -599,4 +605,56 @@ void silly_audio_printspec(const silly_audiospec *spec)
 		fprintf(stderr, "spec->format=SA_SAMPLE_FMT_INVAL\n");
 		break;
 	}
+}
+
+static bool get_32bit_system_dll_path(const wchar_t *system_lib, wchar_t *system_lib_path)
+{
+	//_WIN32£ºDefined for applications for Win32 and Win64. Always defined.
+	//_WIN64£ºDefined for applications for Win64.
+#if defined(_WIN32) || defined(_WIN64)
+	UINT ret;
+
+#ifdef _WIN64
+	ret = GetSystemWow64DirectoryW(system_lib_path, MAX_PATH);
+#else
+	ret = GetSystemDirectoryW(system_lib_path, MAX_PATH);
+#endif
+
+	if (!ret) {
+		fprintf(stderr, "Failed to get windows 32bit system path: "
+			"%lu", GetLastError());
+		return false;
+	}
+
+	wcscat(system_lib_path, L"\\");
+	wcscat(system_lib_path, system_lib);
+	return true;
+#else
+	return false;
+#endif
+}
+
+void silly_audio_fix()
+{
+#if _WIN32
+	wchar_t *wpath[MAX_PATH];
+	int ret;
+
+	if (get_32bit_system_dll_path(L"XAudio2_7.dll", wpath)) {
+		struct dstr path = { 0 };
+		struct dstr path_bak = { 0 };
+		dstr_from_wcs(&path, wpath);	//wchar_t * ==> char *
+
+		dstr_copy(&path_bak, path.array);
+		dstr_cat(&path_bak, "_bak");
+
+		ret = os_rename(path.array, path_bak.array);
+		if (ret == 0) fprintf(stderr, "%s rename to %s ok\n", path.array, path_bak.array);
+		else fprintf(stderr, "%s rename to %s failed: ret=%d, lasterr=%d\n", path.array, path_bak.array, ret, GetLastError());
+
+		os_copyfile("XAudio2_7.dll", path.array);
+		if (ret == 0) fprintf(stderr, "XAudio2_7.dll copy to %s ok\n", path.array);
+		else fprintf(stderr, "XAudio2_7.dll copy to %s failed: ret=%d, lasterr=%d\n", path.array, ret, GetLastError());
+	}
+#endif
 }

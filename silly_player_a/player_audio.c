@@ -129,6 +129,7 @@ int main(int argc, char* argv[])
 	printf("\t 'duration\\n' to query duration\n");
 	printf("\t 'gstart\\n' to start grabbing samples\n");
 	printf("\t 'gstop\\n' to stop grabbing samples\n");
+	printf("\t 'fix\\n' to fix XAudio2_7.dll\n");
 	printf("\n");
 	printf("\t 'quit\\n' to quit\n");
 	do {
@@ -184,6 +185,9 @@ int main(int argc, char* argv[])
 		}
 		else if (strcmpi(cmd, "gstop") == 0) {
 			grab_thread_stop();
+		}
+		else if (strcmpi(cmd, "fix") == 0) {
+			silly_audio_fix();
 		}
 		else if (strcmpi(cmd, "quit") == 0) {
 			grab_thread_stop();

@@ -608,13 +608,14 @@ int silly_audio_fetch_internal(float *sample_buffer, int sample_buffer_size, boo
 //stop fetching audio samples
 void silly_audio_fetch_stop()
 {
-	if (!active) return;
-	if (active && global_exit_parse) return;
 	if (!is->active_fetch) return;
 
 	is->active_fetch = false;
 
-	swr_free(&is->swr_ctx_fetch);
+	if (is->swr_ctx_fetch) {
+		swr_free(&is->swr_ctx_fetch);
+		is->swr_ctx_fetch = NULL;
+	}
 	da_free(audio_fetch_array);
 
 	pthread_mutex_lock(&is->audio_fetch_buffer_mutex);

@@ -71,6 +71,10 @@ typedef int64_t off64_t;
 extern "C" {
 #endif
 
+EXPORT int silly_audio_initialize();
+
+EXPORT void silly_audio_destroy();
+
 EXPORT int silly_audio_open(const char *filename, const silly_audiospec *sa_desired, silly_audiospec *sa_obtained, bool loop);
 
 EXPORT void silly_audio_close();

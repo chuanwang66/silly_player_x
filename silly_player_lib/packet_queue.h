@@ -4,7 +4,7 @@
 #include <libavformat/avformat.h>
 #include <SDL.h>
 
-#define MAX_AUDIOQ_SIZE (16*1024) //#define MAX_AUDIOQ_SIZE (5*16*1024)
+#define MAX_AUDIOQ_SIZE (8*1024) //#define MAX_AUDIOQ_SIZE (5*16*1024)
 #define MAX_VIDEOQ_SIZE (256*1024) //#define MAX_VIDEOQ_SIZE (5*256*1024)
 
 typedef struct PacketQueue{

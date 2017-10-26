@@ -26,6 +26,7 @@ static float cmid(float x, float min, float max){
 //return: bytes of the frame decoded
 static int audio_decode_frame(VideoState *is, uint8_t *audio_buf, int audio_buf_size){
     int pkt_consumed, data_size = 0;
+	AVFrame audio_frame;	//读取后，转码前 的 临时存储结构
 
     //data_size: bytes of frame decoded
     data_size = av_samples_get_buffer_size(NULL,
@@ -35,12 +36,12 @@ static int audio_decode_frame(VideoState *is, uint8_t *audio_buf, int audio_buf_
         1);
 
     for(;;){
-        //step 1. is->audio_pkt_ptr  ==解码==>  is->audio_frame  ==转码==>  is->out_buffer
+        //step 1. is->audio_pkt_ptr  ==解码==>  audio_frame  ==转码==>  is->out_buffer
         //  1.1 is->audio_pkt_ptr用完，跳到step 2.重新取出一个AVPacket *
-        //  1.2 is->audio_pkt_ptr未用完，再解码出一个is->audio_frame
+        //  1.2 is->audio_pkt_ptr未用完，再解码出一个audio_frame
         while(is->audio_pkt_size > 0){
             int got_frame = 0;
-            pkt_consumed = avcodec_decode_audio4(is->audio_ctx, &is->audio_frame, &got_frame, is->audio_pkt_ptr);  //pkt_consumed: how many bytes of packet consumed
+            pkt_consumed = avcodec_decode_audio4(is->audio_ctx, &audio_frame, &got_frame, is->audio_pkt_ptr);  //pkt_consumed: how many bytes of packet consumed
 
             if(pkt_consumed < 0){
                 is->audio_pkt_size = 0;
@@ -55,7 +56,7 @@ static int audio_decode_frame(VideoState *is, uint8_t *audio_buf, int audio_buf_
                     in_count: number of input samples available in one channel
                     so half of data_size is provided here. HOLY SHIT!!!
                 */
-                if(swr_convert(is->swr_ctx, &is->out_buffer, MAX_AUDIO_FRAME_SIZE, (const uint8_t **)is->audio_frame.data, is->audio_frame.nb_samples) < 0){
+                if(swr_convert(is->swr_ctx, &is->out_buffer, MAX_AUDIO_FRAME_SIZE, (const uint8_t **)audio_frame.data, audio_frame.nb_samples) < 0){
                     fprintf(stderr, "swr_convert: error while converting.\n");
                     return -1;
                 }

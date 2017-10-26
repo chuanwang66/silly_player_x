@@ -106,6 +106,7 @@ void grab_thread_stop() {
 
 int main(int argc, char* argv[])
 {
+	int ret;
 	char line[128];
 	char cmd[128];
 	int param1;
@@ -132,12 +133,16 @@ int main(int argc, char* argv[])
 	printf("\t 'fix\\n' to fix XAudio2_7.dll\n");
 	printf("\n");
 	printf("\t 'quit\\n' to quit\n");
+
+	ret = silly_audio_initialize();
+	if (ret != 0) printf("silly_audio_initialize() failed: %d\n", ret);
+	else printf("silly_audio_initialize() ok\n");
+
 	do {
 		fgets(line, sizeof(line), stdin);
 		if ((num = sscanf(line, "%s %d", &cmd, &param1)) <= 0)
 			continue;
 		if (strcmpi(cmd, "open") == 0) {
-			int ret;
 			silly_audiospec desired_spec, spec;
 			desired_spec.channels = SA_CH_LAYOUT_STEREO;
 			desired_spec.format = SA_SAMPLE_FMT_FLT;
@@ -196,6 +201,8 @@ int main(int argc, char* argv[])
 			exit_process = 1;
 		}
 	} while (!exit_process);
+
+	silly_audio_destroy();
 
 	exit(0);
 }

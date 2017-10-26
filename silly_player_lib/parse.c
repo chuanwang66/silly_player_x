@@ -5,6 +5,7 @@
 
 extern int global_exit;
 extern int global_exit_parse;
+extern int pause_on;
 
 void seek_to(VideoState *is, uint32_t seek_pos_sec)
 {
@@ -86,6 +87,8 @@ int parse_thread(void *arg)
     {
         SDL_Delay(100);
     }
+	SDL_PauseAudio(1);
+	pause_on = 1;
 
     return 0;
 }

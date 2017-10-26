@@ -49,15 +49,12 @@ typedef struct VideoState{
 
 	//(2) a single packet is picked out, waiting for decoding into one or more frames.
 	AVPacket *audio_pkt_ptr;
-	//1 "audio packet" may be decoded into multiple "audio frames", that is,
+	//one "audio packet" may be decoded into multiple "audio frames", that is,
 	//audio_pkt_data[0, ... , audio_pkt_size-1] is the remaining part waiting for decoding
 	uint8_t *audio_pkt_data;
 	int audio_pkt_size;
-	int audio_hw_buf_size; //the actual capacity of audio buffer
 
-	//(3) copy frames into audio_buf[], which would be consumed by
-	// the audio device later.
-	AVFrame audio_frame;
+	//(3) copy frames into audio_buf[], which would be consumed by the audio device later.
 	//audio_buf[audio_index, ... , audio_buf_size-1] is a bunch of audio frame
 	uint8_t audio_buf[(MAX_AUDIO_FRAME_SIZE * 3) >> 1]; //why???
 	size_t audio_buf_index;

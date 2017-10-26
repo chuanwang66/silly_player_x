@@ -33,6 +33,63 @@ extern int pause_on;
 
 static volatile VideoState *is = NULL; //global video state
 
+//invoke me while nothing is active !!!
+static void silly_audio_reset()
+{
+	is->loop = 0;
+
+	//audio related
+	is->audio_stream_index = -1;
+	is->seek_pos_sec = 0;
+	
+	is->audiospec.channels = SA_CH_LAYOUT_INVAL;
+	is->audiospec.format = SA_SAMPLE_FMT_INVAL;
+	is->audiospec.samplerate = 0;
+	is->audiospec.samples = 0;
+
+	is->current_clock = 0;
+	is->audio_clock;
+
+	packet_queue_clear(&is->audioq);
+
+	if (is->audio_pkt_ptr) {
+		av_free_packet(is->audio_pkt_ptr);
+		is->audio_pkt_ptr = NULL;
+	}
+	is->audio_pkt_data = NULL;
+	is->audio_pkt_size = 0;
+
+	memset(is->audio_buf, 0, sizeof(is->audio_buf));
+	is->audio_buf_size = 0;
+	is->audio_buf_index = 0;
+
+	//video related
+	is->video_stream_index = -1;
+
+	memset(is->filename, 0, sizeof(is->filename));
+}
+
+//initialize silly audio
+int silly_audio_initialize()
+{
+	is = av_mallocz(sizeof(VideoState)); //memory allocation with alignment???
+
+	pthread_mutex_init_value(&is->audio_fetch_buffer_mutex);
+	if (pthread_mutex_init(&is->audio_fetch_buffer_mutex, NULL) != 0)
+		return -1;
+
+	return 0;
+}
+
+//un-initialize silly audio
+void silly_audio_destroy()
+{
+	pthread_mutex_destroy(&is->audio_fetch_buffer_mutex);
+
+	av_free(is);
+	is = NULL;
+}
+
 static int open_input()
 {
 	if (avformat_open_input(&is->pFormatCtx, is->filename, NULL, NULL) != 0)
@@ -125,8 +182,6 @@ static int stream_component_open(unsigned int stream_index, const silly_audiospe
 			sa_obtained->samplerate = is->audiospec.samplerate;
 			sa_obtained->samples = is->audiospec.samples;
 		}
-
-		is->audio_hw_buf_size = spec.size;
 	}
 
 	//open decoder
@@ -296,13 +351,9 @@ int silly_audio_open(const char *filename, const silly_audiospec *sa_desired, si
 	global_exit = 0;
 	global_exit_parse = 0;
 
-	is = av_mallocz(sizeof(VideoState)); //memory allocation with alignment, why???
-	is->audio_stream_index = -1;
-	is->video_stream_index = -1;
+	silly_audio_reset();
+
 	strncpy(is->filename, filename, sizeof(is->filename));
-	is->seek_pos_sec = 0;
-	is->audio_buf_size = 0;
-	is->audio_buf_index = 0;
 	is->loop = loop;
 
 	//register all formats & codecs
@@ -311,31 +362,26 @@ int silly_audio_open(const char *filename, const silly_audiospec *sa_desired, si
 	//if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER))
 	if (SDL_Init(SDL_INIT_AUDIO)) {
 		fprintf(stderr, "SDL_Init() error: %s\n", SDL_GetError());
-		av_free(is);
+		silly_audio_reset();
 		return -4;
 	}
 
 	if (open_input() != 0) {
-		av_free(is);
+		silly_audio_reset();
 		return -5;
 	}
 
 	if (open_audio_decoder(sa_desired, sa_obtained) != 0) {
-		av_free(is);
+		silly_audio_reset();
 		return -6;
 	}
-
-	//init fetch
-	pthread_mutex_init_value(&is->audio_fetch_buffer_mutex);
-	if (pthread_mutex_init(&is->audio_fetch_buffer_mutex, NULL) != 0)
-		return -7;
 
 	//parsing thread (reading packets from stream)
 	parse_tid = SDL_CreateThread(parse_thread, "PARSING_THREAD", is);
 	if (!parse_tid) {
 		fprintf(stderr, "create parsing thread failed.\n");
-		av_free(is);
-		return -8;
+		silly_audio_reset();
+		return -7;
 	}
 
 	SDL_PauseAudio(0);
@@ -353,23 +399,28 @@ void silly_audio_close()
 		return;
 	active = 0;
 
+	//stop fetching
 	if (is->active_fetch)
 		silly_audio_fetch_stop();
-	pthread_mutex_destroy(&is->audio_fetch_buffer_mutex);
 
+	pthread_mutex_lock(&is->audio_fetch_buffer_mutex);
+	circlebuf_free(&is->audio_fetch_buffer);
+	pthread_mutex_unlock(&is->audio_fetch_buffer_mutex);
+
+	//stop parsing
 	global_exit = 1;
 	global_exit_parse = 1;
 
 	SDL_WaitThread(parse_tid, NULL);
 
+	//stop reading
 	close_audio_decoder();
-
 	close_input();
 
 	SDL_Quit();
 
-	av_free(is);
-	is = NULL;
+	//reset 'is'
+	silly_audio_reset();
 }
 
 //pause playing
@@ -405,7 +456,7 @@ int silly_audio_seek(int sec)
 	parse_tid = SDL_CreateThread(parse_thread, "PARSING_THREAD", is);
 	if (!parse_tid) {
 		fprintf(stderr, "create parsing thread failed.\n");
-		av_free(is);
+		//TODO
 		return -2;
 	}
 

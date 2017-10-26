@@ -55,9 +55,16 @@ volatile bool grab_active = FALSE;
 volatile bool grab_stop = FALSE;
 DWORD WINAPI grab_thread_proc(LPVOID lpParam)
 {
+	int ret;
 	int tick = 1000 * ((float)FRAMERATE / (float)samplerate); //* 0.9;
 
-	silly_audio_fetch_start(channels, samplerate);
+	if ( (ret = silly_audio_fetch_start(channels, samplerate)) == 0) grab_active = TRUE;
+	else {
+		fprintf(stderr, "silly_audio_fetch_start() failed: %d\n", ret);
+		grab_active = FALSE;
+		return -1;
+	}
+
 	while (!grab_stop) {
 #if 0
 		if(silly_audio_fetch(sample_buffer, sample_buffer_size, false) == -3)	//非阻塞方式: 缓冲不稳定时(用完时)，就会取不到数据
@@ -77,23 +84,20 @@ DWORD WINAPI grab_thread_proc(LPVOID lpParam)
 
 void grab_thread_start() {
 	if (grab_active) {
-		fprintf(stderr, "already started\n");
+		fprintf(stderr, "grab thread already started\n");
 		return;
 	}
 
 	grab_stop = FALSE;
 	grab_thread = CreateThread(NULL, 0, grab_thread_proc, NULL, 0, NULL);
 	if (grab_thread == NULL) {
-		fprintf(stderr, "create thread failed.\n");
-	}
-	else {
-		grab_active = TRUE;
+		fprintf(stderr, "create grab thread failed.\n");
 	}
 }
 
 void grab_thread_stop() {
 	if (!grab_active) {
-		fprintf(stderr, "already stopped\n");
+		fprintf(stderr, "grab thread already stopped\n");
 		return;
 	}
 

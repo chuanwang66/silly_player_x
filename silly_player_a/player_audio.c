@@ -70,7 +70,9 @@ DWORD WINAPI grab_thread_proc(LPVOID lpParam)
 		if(silly_audio_fetch(sample_buffer, sample_buffer_size, false) == -3)	//非阻塞方式: 缓冲不稳定时(用完时)，就会取不到数据
 			fprintf(stderr, "samples not enough, try again\n");
 #else
-		silly_audio_fetch(sample_buffer, sample_buffer_size, true);	//阻塞方式: 每次调用不要阻塞太久
+		ret = silly_audio_fetch(sample_buffer, sample_buffer_size, true);	//阻塞方式: 每次调用不要阻塞太久
+		if (ret != 0)
+			fprintf(stderr, "silly_audio_fetch() failed: %d\n", ret);
 #endif
 
 		LogOnce("audio_grab.pcm", sample_buffer, sample_buffer_size * sizeof(float));

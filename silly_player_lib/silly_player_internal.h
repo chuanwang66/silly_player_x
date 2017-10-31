@@ -68,9 +68,13 @@ typedef struct VideoState{
 	struct circlebuf audio_fetch_buffer;		//ring buffer to hold audio frames decoded, providing for callback
 	pthread_mutex_t audio_fetch_buffer_mutex;
 
-	int channels_fetch;
-	int samplerate_fetch;
+	int out_channels_fetch;
+	int out_samplerate_fetch;
+	int in_channels_fetch;
+	int in_samplerate_fetch;
+	int in_format_fetch;
 	SwrContext *swr_ctx_fetch;
+
 	volatile bool active_fetch;
 
 	/** ************** video related ************** */

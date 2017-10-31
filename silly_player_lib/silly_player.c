@@ -399,14 +399,6 @@ void silly_audio_close()
 		return;
 	active = 0;
 
-	//stop fetching
-	if (is->active_fetch)
-		silly_audio_fetch_stop();
-
-	pthread_mutex_lock(&is->audio_fetch_buffer_mutex);
-	circlebuf_free(&is->audio_fetch_buffer);
-	pthread_mutex_unlock(&is->audio_fetch_buffer_mutex);
-
 	//stop parsing
 	global_exit = 1;
 	global_exit_parse = 1;
@@ -421,6 +413,11 @@ void silly_audio_close()
 
 	//reset 'is'
 	silly_audio_reset();
+
+	//clear fetching
+	pthread_mutex_lock(&is->audio_fetch_buffer_mutex);
+	circlebuf_free(&is->audio_fetch_buffer);
+	pthread_mutex_unlock(&is->audio_fetch_buffer_mutex);
 }
 
 //pause playing
@@ -504,27 +501,23 @@ static DARRAY(float) audio_fetch_array;	//used for conversion in 'audio fetching
 //@param[in] samplerate: samplerate required
 int silly_audio_fetch_start(int channels, int samplerate)
 {
-	if (!active) return -1;							//in-active
-	if (active && global_exit_parse) return -2;		//active & finished
-	if (is->active_fetch) return -3;
+	if (is->active_fetch) return -1;
 
-	is->channels_fetch = channels;
-	is->samplerate_fetch = samplerate;
+	pthread_mutex_lock(&is->audio_fetch_buffer_mutex);
+	circlebuf_free(&is->audio_fetch_buffer);
+	pthread_mutex_unlock(&is->audio_fetch_buffer_mutex);
 
-	is->swr_ctx_fetch = swr_alloc();
-	if (!is->swr_ctx_fetch) return -4;
+	is->out_channels_fetch = channels;
+	is->out_samplerate_fetch = samplerate;
+	is->in_channels_fetch = SA_CH_LAYOUT_INVAL;
+	is->in_samplerate_fetch = 0;
+	is->in_format_fetch = SA_SAMPLE_FMT_INVAL;
+	if (is->swr_ctx_fetch) {
+		swr_free(&is->swr_ctx_fetch);
+		is->swr_ctx_fetch = NULL;
+	}
 
-	is->swr_ctx_fetch = swr_alloc_set_opts(is->swr_ctx_fetch,
-		is->channels_fetch == SA_CH_LAYOUT_MONO ? AV_CH_LAYOUT_MONO : AV_CH_LAYOUT_STEREO,	//out_ch_layout
-		AV_SAMPLE_FMT_FLT,																	//out_sample_fmt
-		is->samplerate_fetch,																	//out_sample_rate
-		is->audiospec.channels == SA_CH_LAYOUT_MONO ? AV_CH_LAYOUT_MONO : AV_CH_LAYOUT_STEREO,	//in_ch_layout
-		is->audiospec.format == SA_SAMPLE_FMT_S16 ? AV_SAMPLE_FMT_S16 : AV_SAMPLE_FMT_FLT,		//in_sample_fmt
-		is->audiospec.samplerate,																//in_sample_rate
-		0,		//log_offset
-		NULL	//log_ctx
-		);
-	swr_init(is->swr_ctx_fetch);
+	da_free(audio_fetch_array);
 
 	is->active_fetch = true;
 
@@ -547,8 +540,8 @@ int silly_audio_fetch_internal(float *sample_buffer, int sample_buffer_size, boo
 	if (!is->active_fetch) return -3;
 	if (pause_on) return -4;
 
-	int to_channels = is->channels_fetch == SA_CH_LAYOUT_MONO ? 1 : 2;
-	int to_samplerate = is->samplerate_fetch;
+	int to_channels = is->out_channels_fetch == SA_CH_LAYOUT_MONO ? 1 : 2;
+	int to_samplerate = is->out_samplerate_fetch;
 	int to_sample_buffer_size = sample_buffer_size;	//# of floats
 
 	int from_channels = is->audiospec.channels == SA_CH_LAYOUT_MONO ? 1 : 2;
@@ -591,6 +584,37 @@ int silly_audio_fetch_internal(float *sample_buffer, int sample_buffer_size, boo
 	circlebuf_pop_front(&is->audio_fetch_buffer, audio_fetch_array.array, from_sample_buffer_size * sizeof(float));
 	pthread_mutex_unlock(&is->audio_fetch_buffer_mutex);
 
+	//initialize 'is->swr_ctx_fetch'
+	if (is->swr_ctx_fetch) {
+		if (is->in_channels_fetch != (is->audiospec.channels == SA_CH_LAYOUT_MONO ? AV_CH_LAYOUT_MONO : AV_CH_LAYOUT_STEREO)
+			|| is->in_samplerate_fetch != is->audiospec.samplerate
+			|| is->in_format_fetch != (is->audiospec.format == SA_SAMPLE_FMT_S16 ? AV_SAMPLE_FMT_S16 : AV_SAMPLE_FMT_FLT) ) {
+			swr_free(&is->swr_ctx_fetch);
+			is->swr_ctx_fetch = NULL;
+		}
+	}
+
+	if (!is->swr_ctx_fetch) {
+		is->swr_ctx_fetch = swr_alloc();
+		if (!is->swr_ctx_fetch) return -9;
+
+		is->in_channels_fetch = is->audiospec.channels == SA_CH_LAYOUT_MONO ? AV_CH_LAYOUT_MONO : AV_CH_LAYOUT_STEREO;
+		is->in_samplerate_fetch = is->audiospec.samplerate;
+		is->in_format_fetch = is->audiospec.format == SA_SAMPLE_FMT_S16 ? AV_SAMPLE_FMT_S16 : AV_SAMPLE_FMT_FLT;
+
+		is->swr_ctx_fetch = swr_alloc_set_opts(is->swr_ctx_fetch,
+			is->out_channels_fetch == SA_CH_LAYOUT_MONO ? AV_CH_LAYOUT_MONO : AV_CH_LAYOUT_STEREO,	//out_ch_layout
+			AV_SAMPLE_FMT_FLT,																	//out_sample_fmt
+			is->out_samplerate_fetch,																	//out_sample_rate
+			is->in_channels_fetch,		//in_ch_layout
+			is->in_format_fetch,		//in_sample_fmt
+			is->in_samplerate_fetch,	//in_sample_rate
+			0,		//log_offset
+			NULL	//log_ctx
+			);
+		swr_init(is->swr_ctx_fetch);
+	}
+
 	//is->audio_fetch ==> sample_buffer
 	if (swr_convert(is->swr_ctx_fetch,
 		(uint8_t **)&sample_buffer,				//out
@@ -599,7 +623,7 @@ int silly_audio_fetch_internal(float *sample_buffer, int sample_buffer_size, boo
 		from_sample_buffer_size / from_channels	//in_count
 		) < 0) {
 		fprintf(stderr, "swr_convert: error while converting.\n");
-		return -9;
+		return -10;
 	}
 
 	return 0;
@@ -612,15 +636,21 @@ void silly_audio_fetch_stop()
 
 	is->active_fetch = false;
 
+	pthread_mutex_lock(&is->audio_fetch_buffer_mutex);
+	circlebuf_free(&is->audio_fetch_buffer);
+	pthread_mutex_unlock(&is->audio_fetch_buffer_mutex);
+
+	is->out_channels_fetch = SA_CH_LAYOUT_INVAL;
+	is->out_samplerate_fetch = 0;
+	is->in_channels_fetch = SA_CH_LAYOUT_INVAL;
+	is->in_samplerate_fetch = 0;
+	is->in_format_fetch = SA_SAMPLE_FMT_INVAL;
 	if (is->swr_ctx_fetch) {
 		swr_free(&is->swr_ctx_fetch);
 		is->swr_ctx_fetch = NULL;
 	}
-	da_free(audio_fetch_array);
 
-	pthread_mutex_lock(&is->audio_fetch_buffer_mutex);
-	circlebuf_free(&is->audio_fetch_buffer);
-	pthread_mutex_unlock(&is->audio_fetch_buffer_mutex);
+	da_free(audio_fetch_array);
 }
 
 //show silly_audiospec

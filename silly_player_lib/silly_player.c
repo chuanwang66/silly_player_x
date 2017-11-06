@@ -546,10 +546,16 @@ int silly_audio_fetch_internal(float *sample_buffer, int sample_buffer_size, boo
 
 	int from_channels = is->audiospec.channels == SA_CH_LAYOUT_MONO ? 1 : 2;
 	int from_samplerate = is->audiospec.samplerate;
-	int from_sample_buffer_size = //# of floats
+	float from_sample_buffer_size_f = //# of floats
 			(float)to_sample_buffer_size 
 			* ((float)from_samplerate / (float)to_samplerate)
 			* ((float)from_channels / (float)to_channels);
+
+	//ceilf()
+	int from_sample_buffer_size = (int)from_sample_buffer_size_f;
+	if (fabs(from_sample_buffer_size_f - from_sample_buffer_size) > 0.000001f)
+		++ from_sample_buffer_size;
+	//fetch left & right channels
 	if (from_sample_buffer_size & 1 != 0)
 		++ from_sample_buffer_size;
 

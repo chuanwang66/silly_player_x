@@ -578,10 +578,15 @@ int silly_audio_fetch_internal(float *sample_buffer, int sample_buffer_size, boo
 		if (pause_on) {
 			return -7;
 		}
+
+		if (!is->active_fetch) {
+			return -8;
+		}
+
 		os_sleep_ms(5);
 	}
 
-	if (!is->active_fetch) return -8;
+	if (!is->active_fetch) return -9;
 
 	//pop out to is->audio_fetch
 	da_resize(audio_fetch_array, from_sample_buffer_size * sizeof(float)); //is->audio_fetch.num: in bytes
@@ -589,7 +594,7 @@ int silly_audio_fetch_internal(float *sample_buffer, int sample_buffer_size, boo
 	pthread_mutex_lock(&is->audio_fetch_buffer_mutex);
 	if (is->audio_fetch_buffer.size < from_sample_buffer_size * sizeof(float)) {
 		pthread_mutex_unlock(&is->audio_fetch_buffer_mutex);
-		return -9;
+		return -10;
 	}
 	circlebuf_pop_front(&is->audio_fetch_buffer, audio_fetch_array.array, from_sample_buffer_size * sizeof(float));
 	pthread_mutex_unlock(&is->audio_fetch_buffer_mutex);
@@ -606,7 +611,7 @@ int silly_audio_fetch_internal(float *sample_buffer, int sample_buffer_size, boo
 
 	if (!is->swr_ctx_fetch) {
 		is->swr_ctx_fetch = swr_alloc();
-		if (!is->swr_ctx_fetch) return -10;
+		if (!is->swr_ctx_fetch) return -11;
 
 		is->in_channels_fetch = is->audiospec.channels == SA_CH_LAYOUT_MONO ? AV_CH_LAYOUT_MONO : AV_CH_LAYOUT_STEREO;
 		is->in_samplerate_fetch = is->audiospec.samplerate;
@@ -633,7 +638,7 @@ int silly_audio_fetch_internal(float *sample_buffer, int sample_buffer_size, boo
 		from_sample_buffer_size / from_channels	//in_count
 		) < 0) {
 		fprintf(stderr, "swr_convert: error while converting.\n");
-		return -11;
+		return -12;
 	}
 
 	return 0;

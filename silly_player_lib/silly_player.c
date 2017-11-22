@@ -742,6 +742,14 @@ void silly_audio_fix()
 		struct dstr path_bak = { 0 };
 		dstr_from_wcs(&path, wpath);	//wchar_t * ==> char *
 
+		//check if needed
+		struct stat stats_sys;
+		struct stat stats_local;
+		if (os_stat(path.array, &stats_sys) == 0 && os_stat("XAudio2_7.dll", &stats_local) == 0) {
+			if (stats_sys.st_size == stats_local.st_size)
+				return;
+		}
+
 		dstr_copy(&path_bak, path.array);
 		dstr_cat(&path_bak, "_bak");
 

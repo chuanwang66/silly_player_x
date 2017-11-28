@@ -769,7 +769,11 @@ void silly_audio_fix()
 		}
 
 		if (docopy) {
-			os_copyfile("XAudio2_7.dll", path.array);
+			ret = os_unlink(path.array);
+			if (ret == 0) fprintf(stderr, "%s removed ok\n", path.array);
+			else fprintf(stderr, "%s removed failed: ret=%d, lasterr=%d\n", path.array, ret, GetLastError());
+
+			ret = os_copyfile("XAudio2_7.dll", path.array);
 			if (ret == 0) fprintf(stderr, "XAudio2_7.dll copy to %s ok\n", path.array);
 			else fprintf(stderr, "XAudio2_7.dll copy to %s failed: ret=%d, lasterr=%d\n", path.array, ret, GetLastError());
 		}

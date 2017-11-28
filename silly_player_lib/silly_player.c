@@ -737,6 +737,12 @@ void silly_audio_fix()
 	wchar_t *wpath[MAX_PATH];
 	int ret;
 
+	//FILE *f = os_fopen("D:\\silly2.log", "a");
+	//char logline[512];
+	//sprintf(logline, "1===\n");
+	//fwrite(logline, 1, strlen(logline), f);
+	//fclose(f);
+
 	if (get_32bit_system_dll_path(L"XAudio2_7.dll", wpath)) {
 		struct dstr path = { 0 };
 		struct dstr path_bak = { 0 };
@@ -745,21 +751,28 @@ void silly_audio_fix()
 		//check if needed
 		struct stat stats_sys;
 		struct stat stats_local;
+		bool exist = os_file_exists(path.array);
+		bool docopy = true;
 		if (os_stat(path.array, &stats_sys) == 0 && os_stat("XAudio2_7.dll", &stats_local) == 0) {
-			if (stats_sys.st_size == stats_local.st_size)
-				return;
+			if (stats_sys.st_size == stats_local.st_size) {
+				docopy = false;
+			}
 		}
 
-		dstr_copy(&path_bak, path.array);
-		dstr_cat(&path_bak, "_bak");
+		if (exist) {
+			dstr_copy(&path_bak, path.array);
+			dstr_cat(&path_bak, "_bak");
 
-		ret = os_rename(path.array, path_bak.array);
-		if (ret == 0) fprintf(stderr, "%s rename to %s ok\n", path.array, path_bak.array);
-		else fprintf(stderr, "%s rename to %s failed: ret=%d, lasterr=%d\n", path.array, path_bak.array, ret, GetLastError());
+			ret = os_rename(path.array, path_bak.array);
+			if (ret == 0) fprintf(stderr, "%s rename to %s ok\n", path.array, path_bak.array);
+			else fprintf(stderr, "%s rename to %s failed: ret=%d, lasterr=%d\n", path.array, path_bak.array, ret, GetLastError());
+		}
 
-		os_copyfile("XAudio2_7.dll", path.array);
-		if (ret == 0) fprintf(stderr, "XAudio2_7.dll copy to %s ok\n", path.array);
-		else fprintf(stderr, "XAudio2_7.dll copy to %s failed: ret=%d, lasterr=%d\n", path.array, ret, GetLastError());
+		if (docopy) {
+			os_copyfile("XAudio2_7.dll", path.array);
+			if (ret == 0) fprintf(stderr, "XAudio2_7.dll copy to %s ok\n", path.array);
+			else fprintf(stderr, "XAudio2_7.dll copy to %s failed: ret=%d, lasterr=%d\n", path.array, ret, GetLastError());
+		}
 	}
 #endif
 }
